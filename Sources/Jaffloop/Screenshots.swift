@@ -16,10 +16,12 @@ enum Screenshots {
         let amir = model.summaries.first { $0.person.handle == "amir" }!.person
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
+        // Keep "today" times in the future so the shots look the same whenever they are rendered.
+        func at(_ h: Int) -> Date { cal.date(byAdding: .hour, value: min(23, max(h, cal.component(.hour, from: Date()) + 1)), to: today)! }
         let event = CalEvent(id: "e1", title: "1:1 Amir / Feda", start: Date().addingTimeInterval(600), end: Date().addingTimeInterval(2400), attendeeEmails: ["amir@example.com"], attendeeNames: ["Amir"], attendeeCount: 2)
         model.meetings = [
-            CalEvent(id: "m1", title: "Team standup", start: cal.date(byAdding: .hour, value: 10, to: today)!, end: cal.date(byAdding: .hour, value: 11, to: today)!, attendeeEmails: [], attendeeNames: [], attendeeCount: 9),
-            CalEvent(id: "m2", title: "1:1 Sara / Feda", start: cal.date(byAdding: .hour, value: 14, to: today)!, end: cal.date(byAdding: .hour, value: 15, to: today)!, attendeeEmails: [], attendeeNames: [], attendeeCount: 2),
+            CalEvent(id: "m1", title: "Team standup", start: at(10), end: at(10).addingTimeInterval(3600), attendeeEmails: [], attendeeNames: [], attendeeCount: 9),
+            CalEvent(id: "m2", title: "1:1 Sara / Feda", start: at(14), end: at(14).addingTimeInterval(3600), attendeeEmails: [], attendeeNames: [], attendeeCount: 2),
             event,
         ]
 
@@ -47,8 +49,9 @@ enum Screenshots {
 
         let main = AnyView(MainView())
         model.nav = .today
-        shot("today-dark", size: NSSize(width: 1080, height: 700), main)
-        shot("today-light", size: NSSize(width: 1080, height: 700), dark: false, main)
+        shot("today-dark", size: NSSize(width: 1080, height: 800), main)
+        shot("today-light", size: NSSize(width: 1080, height: 800), dark: false, main)
+        shot("min-size", size: NSSize(width: 900, height: 560), main)
         model.nav = .person(sara.id)
         shot("person", size: NSSize(width: 1080, height: 700), main)
         model.nav = .ledger
@@ -56,15 +59,15 @@ enum Screenshots {
         model.nav = .inbox
         shot("inbox", size: NSSize(width: 1080, height: 560), main)
 
-        shot("capture", size: NSSize(width: 700, height: 220), bg: wall,
+        shot("capture", size: NSSize(width: 700, height: 250), bg: wall,
              AnyView(CaptureView(onClose: {}, preset: "owe @sara review RFC fri #rfc !")))
-        shot("capture-said", size: NSSize(width: 700, height: 220), bg: wall,
+        shot("capture-said", size: NSSize(width: 700, height: 250), bg: wall,
              AnyView(CaptureView(onClose: {}, preset: "said @amir \"ship date is firm for Nov 20\"")))
         shot("premeeting", size: NSSize(width: 440, height: 340), bg: wall,
              AnyView(PreMeetingCard(person: amir, event: event, onOpen: {}, onDismiss: {})))
         shot("menubar-popover", size: NSSize(width: 400, height: 460), AnyView(PopoverView()))
         shot("morning-brief", size: NSSize(width: 640, height: 600), AnyView(MorningBriefView()))
-        shot("settings-mcp", size: NSSize(width: 560, height: 460), dark: false, AnyView(SettingsView(calendar: CalendarService(), onHotkeyChange: {}, initialTab: "mcp")))
+        shot("settings-mcp", size: NSSize(width: 560, height: 460), dark: false, AnyView(SettingsView(calendar: CalendarService(), onHotkeyChange: { true }, initialTab: "mcp")))
 
         try? FileManager.default.removeItem(at: tmp)
         NSApp.terminate(nil)
@@ -82,6 +85,7 @@ enum Screenshots {
             let d = cal.date(byAdding: .day, value: off, to: cal.startOfDay(for: now))!
             return hour.map { cal.date(bySettingHour: $0, minute: minute, second: 0, of: d)! } ?? d
         }
+        func todayAt(_ h: Int) -> Date { day(0, hour: min(23, max(h, cal.component(.hour, from: now) + 1))) }
         func ago(_ days: Int) -> Date { cal.date(byAdding: .day, value: -days, to: now)! }
         func person(_ h: String, _ n: String, _ r: Relation, _ c: Int?, last: Int?, email: String = "") -> Person {
             let p = Person(handle: h, name: n, relation: r, cadenceDays: c, matchEmails: email)
@@ -105,9 +109,9 @@ enum Screenshots {
         add(.owe, "Send promotion timeline draft", sara, due: day(2), created: 3)
         add(.owe, "Approve headcount request", amir, due: day(0), created: 4)
         add(.owe, "Intro to the platform team lead", maya, due: day(5), created: 2)
-        add(.owe, "Share Q4 roadmap outline", jonas, due: day(0, hour: 16, minute: 0), time: true, created: 2)
+        add(.owe, "Share Q4 roadmap outline", jonas, due: todayAt(16), time: true, created: 2)
         add(.task, "Prepare Q4 plan", nil, due: day(1), created: 5, snoozes: 3, tags: ["planning"])
-        add(.task, "1:1 prep", nil, due: day(0, hour: 9, minute: 0), time: true, created: 7, pinned: true)
+        add(.task, "1:1 prep", nil, due: todayAt(9), time: true, created: 7, pinned: true)
         add(.wait, "API spec for the billing service", amir, due: day(-5), created: 10)
         add(.wait, "Incident review notes", maya, due: day(-1), created: 4)
         add(.wait, "Vendor quote for monitoring", jonas, created: 9)

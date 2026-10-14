@@ -409,3 +409,4 @@ Add entries here as you make choices during the build (date, decision, reason).
 - 2026-10-14: The "dot flies to the menu bar icon" save animation is simplified to a collapse of the bar plus a blip of the icon.
 - 2026-10-14: MCP server is a hand-written stdio JSON-RPC implementation (no SDK dependency). App and server share the SQLite file; settings (read-only mode) live in the DB.
 - 2026-10-14: Release builds are arm64 only, signed with Developer ID and hardened runtime.
+- 2026-10-14: v0.0.2 notarized. UI-only pass: fixed column grid, collapsed empty sections, larger small type, light-mode contrast, focus ring and VoiceOver labels, capture key hints, hotkey recorder, flying-dot save animation.

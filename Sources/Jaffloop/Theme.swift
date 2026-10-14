@@ -23,31 +23,39 @@ enum Theme {
     static let surface = Color(dark: 0x191918, light: 0xFBFAF8)
     static let elevated = Color(dark: 0x232322, light: 0xFFFFFF)
     static let text = Color(dark: 0xEDEBE6, light: 0x1C1B19)
-    static let text2 = Color(dark: 0x8F8C85, light: 0x6B6860)
+    static let text2 = Color(dark: 0x96938C, light: 0x6B6860)
     static let hairline = Color(nsColor: NSColor(name: nil) { a in
         a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 1, alpha: 0.075) : NSColor(white: 0, alpha: 0.09)
     })
     static let hover = Color(nsColor: NSColor(name: nil) { a in
         a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 1, alpha: 0.05) : NSColor(white: 0, alpha: 0.04)
     })
-    static let clay = Color(dark: 0xE5654A, light: 0xC94A2E)
+    static let clay = Color(dark: 0xEA6E53, light: 0xB5401F)
     static let avatar = Color(dark: 0x2B2A28, light: 0xE7E4DC)
 
     static func kind(_ k: ItemKind) -> Color {
         switch k {
-        case .owe: return Color(dark: 0xC9A46A, light: 0xA9803F)
-        case .wait: return Color(dark: 0x7E9DB5, light: 0x4F7391)
-        case .bring: return Color(dark: 0xA294B8, light: 0x7C6B96)
-        case .task: return Color(dark: 0x8A877F, light: 0x77746C)
-        case .said: return Color(dark: 0x8DAE98, light: 0x5E8A6F)
-        case .note: return Color(dark: 0x8A877F, light: 0x77746C)
+        case .owe: return Color(dark: 0xC9A46A, light: 0x8A6528)
+        case .wait: return Color(dark: 0x7E9DB5, light: 0x47698A)
+        case .bring: return Color(dark: 0xA294B8, light: 0x6E5D8A)
+        case .task: return Color(dark: 0x95928A, light: 0x6B685F)
+        case .said: return Color(dark: 0x8DAE98, light: 0x497657)
+        case .note: return Color(dark: 0x95928A, light: 0x6B685F)
         }
     }
 
     static func title(_ size: CGFloat = 30) -> Font { .system(size: size, weight: .semibold, design: .serif) }
     static let row = Font.system(size: 13)
-    static let mono = Font.system(size: 10.5, weight: .medium, design: .monospaced)
+    static let mono = Font.system(size: 11.5, weight: .medium, design: .monospaced)
+    static let caps = Font.system(size: 11.5, weight: .medium)
     static let date = Font.system(size: 11.5).monospacedDigit()
+}
+
+/// Fixed right-hand columns so kind, person and date line up on every row.
+enum Col {
+    static let kind: CGFloat = 58
+    static let person: CGFloat = 78
+    static let date: CGFloat = 84
 }
 
 enum Motion {

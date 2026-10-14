@@ -82,7 +82,6 @@ struct CaptureView: View {
                                      onTab: { complete() }, moveToEnd: cursorToEnd)
                             .frame(height: 28)
                     }
-                    Kbd("⏎")
                 }
                 .padding(.horizontal, 18).padding(.vertical, 16)
 
@@ -93,11 +92,20 @@ struct CaptureView: View {
                     if !suggestions.isEmpty || (atQuery != nil && !(atQuery ?? "").isEmpty) { suggestionList }
                 } else {
                     Rectangle().fill(Theme.hairline).frame(height: 0.5)
-                    HStack(spacing: 14) {
-                        hint("owe", "you promised"); hint("wait", "they promised"); hint("bring", "talking point")
-                        hint("todo", "your task"); hint("said", "log a quote"); hint("note", "a fact")
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 14) {
+                            hint("owe", "you promised"); hint("wait", "they promised"); hint("bring", "talking point")
+                            hint("todo", "your task"); hint("said", "log a quote"); hint("note", "a fact")
+                        }
+                        Text("fri · 3pm · in 2h · every mon · remind 1h · #tag · !").font(Theme.mono).foregroundStyle(Theme.text2)
                     }.padding(.horizontal, 18).padding(.vertical, 10).frame(maxWidth: .infinity, alignment: .leading)
                 }
+                Rectangle().fill(Theme.hairline).frame(height: 0.5)
+                HStack(spacing: 16) {
+                    keyHint("⏎", "save"); keyHint("⌘⏎", "save and keep open"); keyHint("esc", "cancel")
+                    if text.isEmpty { keyHint("↑", "repeat last") }
+                    Spacer(minLength: 0)
+                }.padding(.horizontal, 18).padding(.vertical, 8)
             }
             .background(
                 RoundedRectangle(cornerRadius: 16).fill(model.snapshot ? AnyShapeStyle(Theme.elevated) : AnyShapeStyle(.clear))
@@ -123,6 +131,10 @@ struct CaptureView: View {
 
     func hint(_ k: String, _ d: String) -> some View {
         HStack(spacing: 5) { Text(k).font(Theme.mono).foregroundStyle(Theme.text); Text(d).font(.system(size: 11.5)).foregroundStyle(Theme.text2) }
+    }
+
+    func keyHint(_ k: String, _ d: String) -> some View {
+        HStack(spacing: 6) { Kbd(k); Text(d).font(.system(size: 11.5)).foregroundStyle(Theme.text2) }
     }
 
     @ViewBuilder var chips: some View {

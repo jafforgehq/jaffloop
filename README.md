@@ -8,7 +8,7 @@ Capture in one line. Everything stays on your Mac. Claude can read and write you
 
 ## Features
 
-- **One-line capture** with a global hotkey (default `⌥Space`). Parsed locally and live, shown as chips.
+- **One-line capture** with a global hotkey (default `⌥Space`, or record your own in Settings). Parsed locally and live, shown as chips.
 - **Six item kinds**: `owe`, `wait`, `bring`, `task`, `said`, `note`.
 - **Today** with sections for Slipping, Overdue, Today, Waiting on (stale), Check in (people past their 1:1 cadence) and Inbox.
 - **Person pages** with a cadence ring, last 1:1, next meeting, and four sections: I owe them, They owe me, Bring up, Said log.
@@ -54,14 +54,14 @@ Dates: `today`, `tomorrow`, weekdays, `next mon`, `15 nov`, `in 2h`, `eod`, `eow
 
 Requires macOS 14 or later on Apple Silicon.
 
-1. Download `Jaffloop-0.0.1.zip` from [Releases](../../releases) and unzip it.
+1. Download `Jaffloop-0.0.2.zip` from [Releases](../../releases) and unzip it.
 2. Move `Jaffloop.app` to `/Applications`.
 3. Open it. See [Signing](#signing-and-notarization) if macOS says it cannot verify the app.
 
-Verify the download against `Jaffloop-0.0.1.zip.sha256`:
+Verify the download against `Jaffloop-0.0.2.zip.sha256`:
 
 ```sh
-shasum -a 256 -c Jaffloop-0.0.1.zip.sha256
+shasum -a 256 -c Jaffloop-0.0.2.zip.sha256
 ```
 
 ## Use it with Claude
@@ -124,7 +124,7 @@ codesign --verify --deep --strict /Applications/Jaffloop.app
 spctl --assess --type execute --verbose /Applications/Jaffloop.app   # "accepted, source=Notarized Developer ID"
 ```
 
-**Release status:** the v0.0.1 zip on GitHub is Developer ID signed with the hardened runtime but **not yet notarized**. macOS Gatekeeper will therefore refuse to open the downloaded app on first launch. To open it anyway, right-click the app, choose Open, then confirm, or run `xattr -dr com.apple.quarantine /Applications/Jaffloop.app`. Building from source on your own machine is unaffected.
+**Release status:** the v0.0.2 zip on GitHub is Developer ID signed with the hardened runtime and **notarized and stapled by Apple**, so it opens on first launch without a Gatekeeper warning. The v0.0.1 zip was signed but not notarized.
 
 ## Not in v1
 

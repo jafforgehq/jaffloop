@@ -11,6 +11,7 @@ struct KindLabel: View {
             Circle().fill(Theme.kind(kind)).frame(width: 6, height: 6)
             Text(kind.rawValue).font(Theme.mono).foregroundStyle(Theme.text2)
         }
+        .accessibilityElement(children: .ignore).accessibilityLabel(kind.rawValue)
     }
 }
 
@@ -24,6 +25,7 @@ struct Avatar: View {
             .frame(width: size, height: size)
             .background(Circle().fill(Theme.avatar))
             .overlay(Circle().strokeBorder(Theme.hairline, lineWidth: 0.5))
+            .accessibilityHidden(true)
     }
 }
 
@@ -33,11 +35,36 @@ struct SectionHeader: View {
     var tint: Color = Theme.text2
     var body: some View {
         HStack(spacing: 6) {
-            Text(title.uppercased()).font(.system(size: 10.5, weight: .medium)).tracking(0.8).foregroundStyle(tint)
-            if let count { Text("\(count)").font(.system(size: 10.5).monospacedDigit()).foregroundStyle(Theme.text2) }
+            Text(title.uppercased()).font(Theme.caps).tracking(0.8).foregroundStyle(tint)
+            if let count { Text("\(count)").font(.system(size: 11.5).monospacedDigit()).foregroundStyle(Theme.text2) }
             Rectangle().fill(Theme.hairline).frame(height: 0.5)
         }
         .padding(.top, 20).padding(.bottom, 4)
+        .accessibilityElement(children: .combine).accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// An empty section collapsed to one dim line instead of a header plus a blank block.
+struct EmptySection: View {
+    let title: String
+    let message: String
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(title.uppercased()).font(Theme.caps).tracking(0.8).foregroundStyle(Theme.text2)
+            Text(message).font(.system(size: 12.5)).foregroundStyle(Theme.text2)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 18).padding(.bottom, 2)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Visible keyboard-focus outline; reads the focus state of the nearest focusable ancestor (the Button).
+struct FocusRing: ViewModifier {
+    @Environment(\.isFocused) private var focused
+    var radius: CGFloat = 7
+    func body(content: Content) -> some View {
+        content.overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(Theme.text2, lineWidth: focused ? 1.5 : 0).padding(-2))
     }
 }
 
@@ -56,9 +83,10 @@ struct Kbd: View {
     let text: String
     init(_ t: String) { text = t }
     var body: some View {
-        Text(text).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.text2)
+        Text(text).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.text2)
             .padding(.horizontal, 5).padding(.vertical, 1)
             .background(RoundedRectangle(cornerRadius: 4).fill(Theme.hover))
+            .accessibilityHidden(true)
     }
 }
 
@@ -70,6 +98,7 @@ struct PrimaryButton: View {
             Text(title).font(.system(size: 12, weight: .medium))
                 .padding(.horizontal, 12).padding(.vertical, 5)
                 .foregroundStyle(Theme.bg).background(RoundedRectangle(cornerRadius: 7).fill(Theme.text))
+                .modifier(FocusRing())
         }.buttonStyle(.plain)
     }
 }
@@ -83,7 +112,25 @@ struct GhostButton: View {
                 .padding(.horizontal, 10).padding(.vertical, 4)
                 .foregroundStyle(Theme.text)
                 .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.hairline, lineWidth: 0.5))
+                .modifier(FocusRing())
         }.buttonStyle(.plain)
+    }
+}
+
+/// Low-emphasis text button: no outline until hovered.
+struct QuietButton: View {
+    let title: String
+    var action: () -> Void
+    @EnvironmentObject var model: AppModel
+    @State private var hover = false
+    var body: some View {
+        Button(action: action) {
+            Text(title).font(.system(size: 12))
+                .foregroundStyle(hover ? Theme.text : Theme.text2)
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 6).fill(hover ? Theme.hover : .clear))
+                .modifier(FocusRing(radius: 6))
+        }.buttonStyle(.plain).onHover { hover = !model.snapshot && $0 }
     }
 }
 
@@ -127,6 +174,7 @@ struct LoopRing: View {
         .animation(overdue && visible && !Motion.reduced ? .easeInOut(duration: 1.3).repeatForever(autoreverses: true) : .default, value: breathe)
         .onAppear { if overdue { breathe = true } }
         .modifier(WindowVisible(visible: $visible))
+        .accessibilityHidden(true)
     }
 }
 
@@ -156,6 +204,8 @@ struct CadenceRing: View {
         }
         .frame(width: size, height: size)
         .onAppear { shown = true }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(person.cadenceDays == nil ? "No 1:1 cadence" : (overdue ? "Past 1:1 cadence" : "Within 1:1 cadence"))
     }
 }
 
@@ -176,7 +226,7 @@ struct SnoozeMenu: View {
             Image(systemName: "clock").font(.system(size: 12)).foregroundStyle(Theme.text2).frame(width: 22, height: 22)
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-        .help("Snooze")
+        .help("Snooze").accessibilityLabel("Snooze")
         .popover(isPresented: $custom) {
             VStack(spacing: 10) {
                 DatePicker("", selection: $customDate).datePickerStyle(.graphical).labelsHidden()
@@ -224,13 +274,15 @@ struct ItemRow: View {
         HStack(spacing: 10) {
             Button(action: finish) {
                 LoopRing(overdue: overdue || slipping, closed: completing, hover: ringHover, size: 16)
+                    .modifier(FocusRing(radius: 9))
             }
             .buttonStyle(.plain)
-            .onHover { ringHover = $0 }
+            .onHover { ringHover = !model.snapshot && $0 }
             .help("Complete  ⏎")
+            .accessibilityLabel("Complete \(item.title)")
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(item.title).font(Theme.row).foregroundStyle(Theme.text).lineLimit(1)
+                Text(item.title).font(Theme.row).foregroundStyle(Theme.text).lineLimit(1).truncationMode(.tail).help(item.title)
                 if let b = item.body, !b.isEmpty, !dense {
                     Text(b).font(.system(size: 11.5)).foregroundStyle(Theme.text2).lineLimit(1)
                 }
@@ -253,24 +305,28 @@ struct ItemRow: View {
                     Button(item.pinned ? "Unpin" : "Pin to top") { model.togglePin(item) }
                     Button("Drop", role: .destructive) { model.drop(item) }
                 } label: { Image(systemName: "ellipsis").font(.system(size: 12)).foregroundStyle(Theme.text2).frame(width: 22, height: 22) }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("More actions")
             }
-            if showKind { KindLabel(kind: item.kind).frame(width: 54, alignment: .leading) }
-            if showPerson, let p = model.person(item.personId) {
+            // Fixed-width cells, empty when there is nothing to show, so columns line up across rows.
+            if showKind { KindLabel(kind: item.kind).frame(width: Col.kind, alignment: .leading) }
+            if showPerson {
                 HStack(spacing: 5) {
-                    Avatar(person: p, size: 16)
-                    Text(p.name.split(separator: " ").first.map(String.init) ?? p.name).font(.system(size: 11.5)).foregroundStyle(Theme.text2)
-                }.frame(minWidth: 62, alignment: .leading)
+                    if let p = model.person(item.personId) {
+                        Avatar(person: p, size: 16)
+                        Text(p.name.split(separator: " ").first.map(String.init) ?? p.name).font(.system(size: 11.5)).foregroundStyle(Theme.text2).lineLimit(1)
+                    }
+                }.frame(width: Col.person, alignment: .leading)
             }
-            if let d = Fmt.due(item) {
-                Text(d).font(Theme.date).foregroundStyle(overdue ? Theme.clay : Theme.text2).frame(minWidth: 70, alignment: .trailing)
-            }
+            let due = Fmt.due(item)
+            Text(due ?? "").font(Theme.date).foregroundStyle(overdue ? Theme.clay : Theme.text2)
+                .frame(width: Col.date, alignment: .trailing)
+                .accessibilityLabel(due.map { overdue ? "Overdue, \($0)" : "Due \($0)" } ?? "No due date")
         }
         .offset(x: ghost != nil && !Motion.reduced ? 36 : 0)
         .padding(.horizontal, 8)
         .background(RoundedRectangle(cornerRadius: 8).fill(hovering ? Theme.hover : .clear))
         .contentShape(Rectangle())
-        .onHover { hovering = $0 }
+        .onHover { hovering = !model.snapshot && $0 }
         .contextMenu {
             Button("Complete") { finish() }
             ForEach(model.snoozePresets()) { p in Button("Snooze: \(p.label)") { snooze(until: p.date) } }

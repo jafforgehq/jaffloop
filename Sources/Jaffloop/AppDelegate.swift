@@ -75,7 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.updateStatusIcon()
             self.notifier.reschedule()
         }
-        model.$captureBlip.dropFirst().sink { [weak self] _ in self?.blip() }.store(in: &cancellables)
+        model.$captureBlip.dropFirst().sink { [weak self] _ in self?.flyDot() }.store(in: &cancellables)
     }
 
     func toggleCapture() {
@@ -118,6 +118,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    /// A dot leaves the capture card and lands on the menu bar icon, which then blips.
+    func flyDot() {
+        guard !Motion.reduced, let target = statusItem.button?.window?.frame else { blip(); return }
+        let start: NSPoint
+        if capturePanel.isVisible { start = NSPoint(x: capturePanel.frame.minX + 58, y: capturePanel.frame.maxY - 50) }
+        else if let w = NSApp.keyWindow { start = NSPoint(x: w.frame.midX, y: w.frame.minY + 40) }
+        else { blip(); return }
+        let d: CGFloat = 12
+        let w = NSWindow(contentRect: NSRect(x: start.x - d / 2, y: start.y - d / 2, width: d, height: d), styleMask: .borderless, backing: .buffered, defer: false)
+        w.isOpaque = false; w.backgroundColor = .clear; w.hasShadow = false; w.level = .statusBar
+        w.ignoresMouseEvents = true; w.isReleasedWhenClosed = false
+        let v = NSView(frame: NSRect(x: 0, y: 0, width: d, height: d))
+        v.wantsLayer = true; v.layer?.cornerRadius = d / 2
+        v.layer?.backgroundColor = NSColor.labelColor.cgColor
+        w.contentView = v
+        w.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.42
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.5, 0, 0.9, 0.6)
+            w.animator().setFrame(NSRect(x: target.midX - 3, y: target.midY - 3, width: 6, height: 6), display: true)
+        }, completionHandler: { [weak self] in
+            w.orderOut(nil)
+            self?.blip()
+        })
+    }
+
     func blip() {
         guard let layer = statusItem.button?.layer, !Motion.reduced else { return }
         layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
@@ -157,8 +183,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func openSettings() {
         if settingsWindow == nil {
             settingsWindow = host(SettingsView(calendar: calendar, onHotkeyChange: { [weak self] in
-                guard let self else { return }
-                self.hotkey.register(self.model.settings.hotkey)
+                guard let self else { return false }
+                return self.hotkey.register(self.model.settings.hotkey)
             }), size: NSSize(width: 560, height: 460), title: "Jaffloop Settings")
         }
         NSApp.activate(ignoringOtherApps: true)

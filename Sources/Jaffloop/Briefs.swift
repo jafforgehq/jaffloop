@@ -150,11 +150,11 @@ struct PopoverView: View {
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     var calendar: CalendarService
-    var onHotkeyChange: () -> Void
+    var onHotkeyChange: () -> Bool
     @State private var tab: String
     @State private var copied = false
 
-    init(calendar: CalendarService, onHotkeyChange: @escaping () -> Void, initialTab: String = "general") {
+    init(calendar: CalendarService, onHotkeyChange: @escaping () -> Bool, initialTab: String = "general") {
         self.calendar = calendar; self.onHotkeyChange = onHotkeyChange; _tab = State(initialValue: initialTab)
     }
 
@@ -185,9 +185,7 @@ struct SettingsView: View {
 
     var general: some View {
         Form {
-            Picker("Capture hotkey", selection: Binding(get: { model.settings.hotkey }, set: { v in model.updateSettings { $0.hotkey = v }; onHotkeyChange() })) {
-                ForEach(HotkeyManager.presets, id: \.0) { Text($0.1).tag($0.0) }
-            }
+            LabeledContent("Capture hotkey") { HotkeyRecorder(apply: onHotkeyChange) }
             Picker("Density", selection: bind(\.compact)) { Text("Comfortable").tag(false); Text("Compact").tag(true) }
             Toggle("Haptic feedback on completing an item", isOn: bind(\.haptics))
             Toggle("Sounds (save click, completion tone)", isOn: bind(\.sound))
@@ -222,7 +220,8 @@ struct SettingsView: View {
     }
 
     var mcp: some View {
-        let cmd = "claude mcp add jaffloop -- \"\(Bundle.main.bundlePath)/Contents/MacOS/jaffloop-mcp\""
+        let appPath = model.snapshot ? "/Applications/Jaffloop.app" : Bundle.main.bundlePath   // README shots must not show a dev path
+        let cmd = "claude mcp add jaffloop -- \"\(appPath)/Contents/MacOS/jaffloop-mcp\""
         return Form {
             Section("Connect") {
                 Text(cmd).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
@@ -263,5 +262,68 @@ struct SettingsView: View {
             }
             Text("Everything stays on this Mac. Jaffloop makes no network calls.").font(.system(size: 12)).foregroundStyle(.secondary)
         }.formStyle(.grouped)
+    }
+}
+
+// MARK: - Hotkey recorder
+
+/// Click, then press the shortcut you want. Needs ⌃, ⌥ or ⌘ unless it is a function key.
+struct HotkeyRecorder: View {
+    @EnvironmentObject var model: AppModel
+    var apply: () -> Bool
+    @State private var recording = false
+    @State private var monitor: Any?
+    @State private var message: String?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button { recording ? stop() : start() } label: {
+                Text(recording ? "Press shortcut…" : hotkeyLabel(model.settings.hotkey))
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(minWidth: 120).padding(.vertical, 4)
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(recording ? Theme.clay : Theme.hairline, lineWidth: recording ? 1.5 : 0.5))
+            }.buttonStyle(.plain)
+            if model.settings.hotkey != HotkeyManager.defaultSpec && !recording {
+                Button("Reset") { set(HotkeyManager.defaultSpec) }.buttonStyle(.link).font(.system(size: 12))
+            }
+            if let message { Text(message).font(.system(size: 11.5)).foregroundStyle(Theme.clay) }
+        }
+        .onDisappear { stop() }
+    }
+
+    private func start() {
+        message = nil; recording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { e in handle(e); return nil }
+    }
+
+    private func stop() {
+        recording = false
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
+
+    private func handle(_ e: NSEvent) {
+        if e.keyCode == 53 { stop(); return }                       // esc cancels
+        guard let key = HotkeyManager.keyName(forCode: Int(e.keyCode)) else { message = "That key is not supported."; return }
+        let f = e.modifierFlags
+        var parts: [String] = []
+        if f.contains(.control) { parts.append("ctrl") }
+        if f.contains(.option) { parts.append("opt") }
+        if f.contains(.command) { parts.append("cmd") }
+        if f.contains(.shift) { parts.append("shift") }
+        let hasMain = f.contains(.control) || f.contains(.option) || f.contains(.command)
+        guard hasMain || (key.hasPrefix("f") && key.count > 1) else { message = "Add ⌃, ⌥ or ⌘."; return }
+        stop()
+        set((parts + [key]).joined(separator: "+"))
+    }
+
+    private func set(_ spec: String) {
+        let old = model.settings.hotkey
+        model.updateSettings { $0.hotkey = spec }
+        if apply() { message = nil } else {
+            model.updateSettings { $0.hotkey = old }
+            _ = apply()
+            message = "That shortcut is taken."
+        }
     }
 }
