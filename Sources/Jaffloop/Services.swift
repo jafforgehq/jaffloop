@@ -1,0 +1,233 @@
+import AppKit
+import Carbon.HIToolbox
+import UserNotifications
+import JaffloopCore
+
+// MARK: - Global hotkey (Carbon, no dependencies)
+
+final class HotkeyManager {
+    static let presets: [(String, String)] = [
+        ("opt+space", "⌥ Space"), ("ctrl+opt+space", "⌃⌥ Space"), ("cmd+shift+space", "⌘⇧ Space"), ("opt+cmd+j", "⌥⌘ J"), ("ctrl+space", "⌃ Space"),
+    ]
+    private var ref: EventHotKeyRef?
+    private var handler: EventHandlerRef?
+    var onFire: () -> Void = {}
+
+    func register(_ spec: String) {
+        unregister()
+        let parts = spec.split(separator: "+").map(String.init)
+        var mods: UInt32 = 0
+        var key: UInt32 = UInt32(kVK_Space)
+        for p in parts {
+            switch p {
+            case "opt": mods |= UInt32(optionKey)
+            case "cmd": mods |= UInt32(cmdKey)
+            case "ctrl": mods |= UInt32(controlKey)
+            case "shift": mods |= UInt32(shiftKey)
+            case "space": key = UInt32(kVK_Space)
+            case "j": key = UInt32(kVK_ANSI_J)
+            default: break
+            }
+        }
+        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        InstallEventHandler(GetApplicationEventTarget(), { _, _, ud in
+            let me = Unmanaged<HotkeyManager>.fromOpaque(ud!).takeUnretainedValue()
+            DispatchQueue.main.async { me.onFire() }
+            return noErr
+        }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), &handler)
+        let id = EventHotKeyID(signature: OSType(0x4A4C4F50), id: 1)
+        RegisterEventHotKey(key, mods, id, GetApplicationEventTarget(), 0, &ref)
+    }
+
+    func unregister() {
+        if let ref { UnregisterEventHotKey(ref); self.ref = nil }
+        if let handler { RemoveEventHandler(handler); self.handler = nil }
+    }
+}
+
+// MARK: - Menu bar icon
+
+enum LoopIcon {
+    /// An open ring (the loop). With a clay dot when something is overdue.
+    static func image(dot: Bool) -> NSImage {
+        let size = NSSize(width: 20, height: 18)
+        let img = NSImage(size: size, flipped: false) { rect in
+            let c = NSPoint(x: 9, y: 9), r: CGFloat = 5.8
+            let path = NSBezierPath()
+            path.appendArc(withCenter: c, radius: r, startAngle: 70, endAngle: 20, clockwise: false)
+            path.lineWidth = 1.7; path.lineCapStyle = .round
+            NSColor.labelColor.setStroke(); path.stroke()
+            let tip = NSBezierPath(ovalIn: NSRect(x: c.x + r * cos(20 * .pi / 180) - 1.1, y: c.y + r * sin(20 * .pi / 180) - 1.1, width: 2.2, height: 2.2))
+            NSColor.labelColor.setFill(); tip.fill()
+            if dot {
+                NSColor(hex: 0xE5654A).setFill()
+                NSBezierPath(ovalIn: NSRect(x: 13.2, y: 11.2, width: 6, height: 6)).fill()
+            }
+            return true
+        }
+        img.isTemplate = !dot
+        return img
+    }
+}
+
+// MARK: - Notifications
+
+final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
+    static let prefix = "jaffloop."
+    var model: AppModel?
+    var calendar: CalendarService?
+    private var center: UNUserNotificationCenter? { Bundle.main.bundleIdentifier != nil && Bundle.main.bundlePath.hasSuffix(".app") ? UNUserNotificationCenter.current() : nil }
+    private var pending: DispatchWorkItem?
+
+    func start() {
+        guard let c = center else { return }
+        c.delegate = self
+        c.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        func a(_ id: String, _ t: String) -> UNNotificationAction { UNNotificationAction(identifier: id, title: t, options: id.hasPrefix("open") ? [.foreground] : []) }
+        c.setNotificationCategories([
+            UNNotificationCategory(identifier: "REMINDER", actions: [a("done", "Done"), a("snooze", "Snooze 1h"), a("open", "Open")], intentIdentifiers: []),
+            UNNotificationCategory(identifier: "DUE", actions: [a("openLedger", "Open ledger"), a("snoozeAll", "Snooze all")], intentIdentifiers: []),
+            UNNotificationCategory(identifier: "STALE", actions: [a("received", "Mark received"), a("nudge", "Nudge"), a("snooze", "Snooze 1h")], intentIdentifiers: []),
+            UNNotificationCategory(identifier: "PRE", actions: [a("openBrief", "Open brief"), a("dismiss", "Dismiss")], intentIdentifiers: []),
+            UNNotificationCategory(identifier: "MORNING", actions: [a("openMorning", "Open brief")], intentIdentifiers: []),
+        ])
+    }
+
+    /// Debounced; called on every data change.
+    func reschedule() {
+        pending?.cancel()
+        let w = DispatchWorkItem { [weak self] in self?.rebuild() }
+        pending = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: w)
+    }
+
+    private func rebuild() {
+        guard let c = center, let model else { return }
+        c.getPendingNotificationRequests { [weak self] reqs in
+            guard let self else { return }
+            c.removePendingNotificationRequests(withIdentifiers: reqs.map { $0.identifier }.filter { $0.hasPrefix(Self.prefix) })
+            DispatchQueue.main.async { self.schedule(model, c) }
+        }
+    }
+
+    private func isQuiet(_ d: Date, _ s: AppSettings, _ cal: Calendar) -> Bool {
+        let wd = cal.component(.weekday, from: d)
+        if wd == 1 || wd == 7 { return true }
+        let (sh, sm) = AppSettings.hm(s.workStart), (eh, em) = AppSettings.hm(s.workEnd)
+        let mins = cal.component(.hour, from: d) * 60 + cal.component(.minute, from: d)
+        return mins < sh * 60 + sm || mins > eh * 60 + em
+    }
+
+    private func schedule(_ model: AppModel, _ c: UNUserNotificationCenter) {
+        let cal = Calendar.current, now = Date(), s = model.settings
+        func content(_ title: String, _ body: String, _ cat: String, thread: String, info: [String: Any] = [:]) -> UNMutableNotificationContent {
+            let n = UNMutableNotificationContent(); n.title = title; n.body = body; n.categoryIdentifier = cat; n.threadIdentifier = thread; n.userInfo = info; n.sound = nil
+            return n
+        }
+        func add(_ id: String, _ n: UNNotificationContent, at: Date) {
+            let comps = cal.dateComponents([.year, .month, .day, .hour, .minute, .second], from: max(at, now.addingTimeInterval(2)))
+            c.add(UNNotificationRequest(identifier: Self.prefix + id, content: n, trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+        }
+
+        // 1. reminders and due times, batched into 10-minute windows
+        struct Due { var item: Item; var at: Date; var explicit: Bool }
+        var dues: [Due] = []
+        for i in model.openItems {
+            if let r = i.remindAt, r > now { dues.append(Due(item: i, at: r, explicit: true)) }
+            else if i.dueHasTime, let d = i.dueAt, d > now, !isQuiet(d, s, cal) { dues.append(Due(item: i, at: d, explicit: false)) }
+        }
+        dues.sort { $0.at < $1.at }
+        var groups: [[Due]] = []
+        for d in dues { if let g = groups.last, d.at.timeIntervalSince(g[0].at) < 600 { groups[groups.count - 1].append(d) } else { groups.append([d]) } }
+        for g in groups.prefix(30) {
+            if g.count == 1, let d = g.first {
+                let who = model.person(d.item.personId)?.name
+                add("item.\(d.item.id)", content(d.item.title, who ?? "", "REMINDER", thread: "items", info: ["id": d.item.id]), at: d.at)
+            } else {
+                add("batch.\(g[0].item.id)", content("\(g.count) things due", g.prefix(3).map { $0.item.title }.joined(separator: " · "), "DUE", thread: "items"), at: g[0].at)
+            }
+        }
+
+        // 2. due today, 16:30 weekdays (next 7 days)
+        for off in 0..<7 {
+            guard let day = cal.date(byAdding: .day, value: off, to: cal.startOfDay(for: now)), !isQuiet(cal.date(bySettingHour: 12, minute: 0, second: 0, of: day) ?? day, s, cal),
+                  let at = cal.date(bySettingHour: 16, minute: 30, second: 0, of: day), at > now else { continue }
+            let next = cal.date(byAdding: .day, value: 1, to: day)!
+            let n = model.openItems.filter { $0.kind == .owe && ($0.dueAt.map { $0 >= day && $0 < next } ?? false) }.count
+            if n > 0 { add("due.\(off)", content("\(n) promise\(n == 1 ? "" : "s") due today", "Still open.", "DUE", thread: "due"), at: at) }
+        }
+
+        // 3. morning brief, weekdays
+        let (mh, mm) = AppSettings.hm(s.morningBrief)
+        let owed = model.openItems.filter { $0.kind == .owe && Rules.isOverdue($0, now: now) }.count
+        let waits = model.openItems.filter { Rules.isStaleWait($0, now: now, settings: s) }.count
+        for off in 0..<7 {
+            guard let day = cal.date(byAdding: .day, value: off, to: cal.startOfDay(for: now)),
+                  ![1, 7].contains(cal.component(.weekday, from: day)),
+                  let at = cal.date(bySettingHour: mh, minute: mm, second: 0, of: day), at > now else { continue }
+            add("morning.\(off)", content("Morning brief", "\(owed) overdue promise\(owed == 1 ? "" : "s"), \(waits) stale wait\(waits == 1 ? "" : "s").", "MORNING", thread: "brief"), at: at)
+        }
+
+        // 4. stale waiting-on: once per item
+        var notified = Set(UserDefaults.standard.stringArray(forKey: "staleNotified") ?? [])
+        for i in model.openItems where i.kind == .wait && Rules.isStaleWait(i, now: now, settings: s) && !notified.contains(i.id) {
+            let who = model.person(i.personId)?.name.split(separator: " ").first.map(String.init) ?? "Someone"
+            var at = now.addingTimeInterval(30)
+            if isQuiet(at, s, cal) { at = nextWorkStart(after: now, s, cal) }
+            add("stale.\(i.id)", content("\(who) hasn't sent \(i.title)", "Waiting since \(Fmt.short(i.createdAt, "d MMM")).", "STALE", thread: "stale", info: ["id": i.id]), at: at)
+            notified.insert(i.id)
+        }
+        UserDefaults.standard.set(Array(notified), forKey: "staleNotified")
+    }
+
+    private func nextWorkStart(after d: Date, _ s: AppSettings, _ cal: Calendar) -> Date {
+        let (h, m) = AppSettings.hm(s.workStart)
+        var day = cal.startOfDay(for: d)
+        for _ in 0..<8 {
+            if let t = cal.date(bySettingHour: h, minute: m, second: 0, of: day), t > d, ![1, 7].contains(cal.component(.weekday, from: t)) { return t }
+            day = cal.date(byAdding: .day, value: 1, to: day)!
+        }
+        return d.addingTimeInterval(3600)
+    }
+
+    func postPreMeeting(person: Person, event: CalEvent, items: [Item]) {
+        guard let c = center else { return }
+        let top = items.prefix(3).map { $0.title }.joined(separator: " · ")
+        let n = UNMutableNotificationContent()
+        n.title = "\(event.title) in \(max(1, Int(event.start.timeIntervalSinceNow / 60))) min"
+        n.body = items.isEmpty ? "Nothing open with \(person.name)." : "\(items.count) open · \(top)"
+        n.categoryIdentifier = "PRE"; n.threadIdentifier = "pre"; n.userInfo = ["person": person.id]
+        c.add(UNNotificationRequest(identifier: Self.prefix + "pre.\(event.id)", content: n, trigger: nil))
+    }
+
+    // MARK: delegate
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions { [.banner, .list] }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive r: UNNotificationResponse) async {
+        let info = r.notification.request.content.userInfo
+        let action = r.actionIdentifier
+        await MainActor.run {
+            guard let model else { return }
+            let item = (info["id"] as? String).flatMap { try? model.store.item($0) } ?? nil
+            switch action {
+            case "done", "received": if let item { model.complete(item) }
+            case "snooze": if let item { model.snooze(item, until: Date().addingTimeInterval(3600)) }
+            case "snoozeAll":
+                for i in model.openItems where i.kind == .owe && Rules.isOverdue(i, now: Date()) || (i.kind == .owe && (i.dueAt.map { Calendar.current.isDateInToday($0) } ?? false)) { model.snooze(i, until: Date().addingTimeInterval(3600)) }
+            case "nudge":
+                if let item, let p = model.person(item.personId) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("Hi \(p.name.split(separator: " ").first.map(String.init) ?? p.name), quick check-in on \(item.title). Any update?", forType: .string)
+                }
+            case "openLedger": model.nav = .ledger; model.openMain()
+            case "openBrief": if let pid = info["person"] as? String, let p = model.person(pid) { model.openPersonBrief(p) }
+            case "openMorning": model.openMorningBrief()
+            case "dismiss": break
+            default:
+                if let item, let pid = item.personId { model.nav = .person(pid) } else { model.nav = .today }
+                model.openMain()
+            }
+        }
+    }
+}
