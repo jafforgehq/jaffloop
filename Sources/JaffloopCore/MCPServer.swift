@@ -1,6 +1,9 @@
 import Foundation
 import GRDB
 
+/// Keep in sync with VERSION in scripts/build-app.sh.
+public let mcpServerVersion = "0.0.2"
+
 /// Minimal MCP server over newline-delimited JSON-RPC (stdio). No network.
 public final class MCPServer {
     let store: Store
@@ -34,7 +37,7 @@ public final class MCPServer {
         case "initialize":
             return ok(["protocolVersion": (params["protocolVersion"] as? String) ?? "2025-03-26",
                        "capabilities": ["tools": [String: Any](), "resources": [String: Any]()],
-                       "serverInfo": ["name": "jaffloop", "version": "0.0.1"]])
+                       "serverInfo": ["name": "jaffloop", "version": mcpServerVersion]])
         case "ping": return ok([String: Any]())
         case "tools/list": return ok(["tools": Self.toolDefs])
         case "tools/call":

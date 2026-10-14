@@ -5,7 +5,7 @@ import JaffloopCore
 var path = JaffloopPaths.defaultURL
 let args = CommandLine.arguments
 if let i = args.firstIndex(of: "--db"), i + 1 < args.count { path = URL(fileURLWithPath: args[i + 1]) }
-if args.contains("--version") { print("jaffloop-mcp 0.0.1"); exit(0) }
+if args.contains("--version") { print("jaffloop-mcp \(mcpServerVersion)"); exit(0) }
 
 do {
     let pool = try openJaffloopDatabase(at: path)
