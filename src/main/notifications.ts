@@ -11,6 +11,10 @@ export interface NotifierDeps {
   item(id: string): Item | null;
   people(): Map<string, string>;
   settings(): Settings;
+  /** epoch ms the notifications are paused until, or null */
+  pausedUntil(): number | null;
+  /** the pause ran out: clear it */
+  resumed(): void;
   /** small json with the stale waiting-on ids that already had their notice */
   stateFile: string;
   done(id: string): void;
@@ -32,6 +36,7 @@ export class Notifier {
   private hourly: NodeJS.Timeout | undefined;
   private live = new Set<Notification>();
   private notified: Set<string>;
+  private resumeTimer: NodeJS.Timeout | undefined;
 
   constructor(private d: NotifierDeps, private now: () => number = Date.now, private enabled = Notification.isSupported()) {
     this.notified = new Set(readJson<string[]>(d.stateFile, []));
@@ -46,6 +51,7 @@ export class Notifier {
 
   stop(): void {
     clearTimeout(this.debounce);
+    clearTimeout(this.resumeTimer);
     clearInterval(this.hourly);
     for (const t of this.timers.values()) clearTimeout(t.timer);
     this.timers.clear();
@@ -62,7 +68,14 @@ export class Notifier {
 
   rebuild(): void {
     const now = this.now();
-    const plan = planNotifications({ items: this.d.items(), people: this.d.people(), settings: this.d.settings(), now, notified: this.notified });
+    const pausedUntil = this.d.pausedUntil();
+    const plan = planNotifications({ items: this.d.items(), people: this.d.people(), settings: this.d.settings(), now, notified: this.notified, pausedUntil });
+    // when the pause ends, clear it and plan again (shortcut: a pause longer than 24 days is picked up by the hourly rebuild)
+    clearTimeout(this.resumeTimer);
+    if (pausedUntil && pausedUntil > now && pausedUntil - now <= MAX_TIMEOUT) {
+      this.resumeTimer = setTimeout(() => { this.d.resumed(); this.rebuild(); }, pausedUntil - now + 50);
+      this.resumeTimer.unref();
+    } else if (pausedUntil && pausedUntil <= now) this.d.resumed();
     const wanted = new Map(plan.map((p) => [p.id, p]));
     for (const [id, t] of this.timers) if (!wanted.has(id)) { clearTimeout(t.timer); this.timers.delete(id); }
     for (const p of plan) {
@@ -78,12 +91,15 @@ export class Notifier {
     }
   }
 
+  private paused(): boolean { const u = this.d.pausedUntil(); return u !== null && this.now() < u; }
+
   private markStale(id: string): void {
     this.notified.add(id);
     try { writeJsonAtomic(this.d.stateFile, [...this.notified]); } catch { /* the notice may repeat after a restart; not worth failing */ }
   }
 
   private fire(p: Planned): void {
+    if (this.paused()) return; // paused after this timer was set: the stale notice stays unmarked
     if (p.kind === 'stale' && p.itemId) {
       this.markStale(p.itemId);
       if (!this.d.item(p.itemId) || this.d.item(p.itemId)!.status !== 'open') return;

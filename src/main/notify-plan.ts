@@ -23,6 +23,8 @@ export interface PlanInput {
   now: number;
   /** stale waiting-on items that already had their one notice */
   notified: ReadonlySet<string>;
+  /** notifications are paused until this time (epoch ms); anything planned earlier is dropped */
+  pausedUntil?: number | null;
 }
 
 const BATCH_MS = 10 * 60_000;
@@ -117,5 +119,9 @@ export function planNotifications(input: PlanInput): Planned[] {
     out.push({ at, id: `stale.${i.id}`, title: `${who} hasn't sent ${i.title}`, body: `Waiting since ${fmtShort(i.createdAt, 'd MMM')}.`, kind: 'stale', itemId: i.id });
   }
 
-  return out.sort((a, b) => a.at - b.at);
+  const sorted = out.sort((a, b) => a.at - b.at);
+  return input.pausedUntil && now < input.pausedUntil ? sorted.filter((p) => p.at >= input.pausedUntil!) : sorted;
 }
+
+/** The "Until tomorrow 09:00" choice of the tray's pause menu. */
+export const tomorrowNine = (now: number): number => atTime(addDays(startOfDay(now), 1), 9, 0);

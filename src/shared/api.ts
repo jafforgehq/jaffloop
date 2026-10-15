@@ -3,7 +3,7 @@
 // Main: `ipcMain.handle('api:<method>')` for each name in API_METHODS (src/main/ipc.ts); events go out on 'evt:<name>'.
 // The preload script builds window.jaffloop from API_METHODS, so adding a method means: add it to the interface AND the list.
 
-import type { Interaction, InteractionKind, Item, ItemFilter, ItemSource, ParsedCapture, Person, Snapshot } from './types';
+import type { ActivityEntry, HeatRow, Interaction, InteractionKind, Item, ItemFilter, ItemSource, KeptRate, ParsedCapture, Person, ReviewData, Snapshot, UpcomingDate } from './types';
 
 export type Density = 'compact' | 'comfortable' | 'spacious';
 export type AppearanceChoice = 'system' | 'light' | 'dark';
@@ -43,6 +43,16 @@ export interface UiState {
   /** background update checks (default on, like Jaffer); installing always asks or waits for quit */
   autoUpdateCheck: boolean;
   dismissedCheckIns: { day: string; ids: string[] };
+  /** what the menu bar shows next to the icon: the overdue count, or the next item due */
+  trayText: 'count' | 'next';
+  /** notifications are paused until this time (epoch ms), null = not paused */
+  pauseUntil: number | null;
+  /** local day ('YYYY-MM-DD') the end-of-day wrap-up card was last shown or dismissed */
+  wrapupDay: string;
+  /** local day the ring-burst celebration last played */
+  burstDay: string;
+  /** show a work-anniversary / birthday reminder chip under Check in */
+  showDates: boolean;
 }
 
 export type UpdateStatus = 'unavailable' | 'idle' | 'checking' | 'downloading' | 'ready' | 'uptodate' | 'error';
@@ -103,6 +113,19 @@ export interface Api {
   /** creates the person from a display name when the handle is new; null for an unusable name */
   addPerson(name: string): Promise<Person | null>;
   logInteraction(personId: string, kind?: InteractionKind, notes?: string): Promise<Interaction>;
+  /** like capture, but a line that starts with a capture-template name creates all the template's items */
+  captureMany(line: string): Promise<Item[]>;
+  /** the weekly review for [fromMs, toMs); toMs defaults to now */
+  review(fromMs: number, toMs?: number): Promise<ReviewData>;
+  keptRate(periodDays: number): Promise<KeptRate>;
+  /** item events since fromMs, newest first */
+  activity(fromMs: number, limit?: number): Promise<ActivityEntry[]>;
+  heatGrid(weeks?: number): Promise<HeatRow[]>;
+  /** consecutive weeks (counting back from this one) in which the 1:1 cadence was met */
+  onTimeStreak(personId: string): Promise<number>;
+  upcomingDates(withinDays?: number): Promise<UpcomingDate[]>;
+  /** pause or resume notifications; null resumes */
+  pauseNotifications(untilMs: number | null): Promise<void>;
 
   // ---- interface state ----
   uiState(): Promise<UiState>;
@@ -142,6 +165,7 @@ export interface Api {
 export const API_METHODS = [
   'snapshot', 'item', 'items', 'search', 'history', 'snoozed', 'tagsOf', 'setTags', 'saidLog', 'interactions', 'capture', 'parse',
   'update', 'restore', 'complete', 'drop', 'reopen', 'snooze', 'assign', 'savePerson', 'addPerson', 'logInteraction',
+  'captureMany', 'review', 'keptRate', 'activity', 'heatGrid', 'onTimeStreak', 'upcomingDates', 'pauseNotifications',
   'uiState', 'setUiState', 'appInfo', 'saveSettings',
   'openMain', 'openCapture', 'captureSubmit', 'captureHide', 'openSettings', 'openPersonBrief', 'openMorningBrief', 'closeWindow',
   'setHotkey', 'playSound', 'copyText', 'openExternal', 'revealDatabase', 'exportData', 'quit',

@@ -3,7 +3,8 @@
 import { batch, computed, signal } from '@preact/signals';
 import type { AppInfo, Nav, UiState, UpdateState } from '../shared/api';
 import type { Item, Person, PersonSummary, Snapshot } from '../shared/types';
-import { Fmt, NavHistory, PinOrder, parseCapture, sortPeople } from './core';
+import { Fmt, NavHistory, PinOrder, nextOneOnOneAt, parseCapture, sortPeople } from './core';
+import { nextOneOnOnePreset, nudgeText } from './speed-logic';
 import { type SnoozePreset, snoozePresets as presetsAt } from './ui-logic';
 
 export const api = window.jaffloop;
@@ -12,7 +13,7 @@ export const view = api.view;
 // ---------------------------------------------------------------- state
 
 const emptySnapshot: Snapshot = {
-  settings: { eodTime: '17:30', workStart: '09:00', workEnd: '18:00', morningBrief: '08:30', staleDaysAfterDue: 3, staleDaysNoDue: 5, mcpReadOnly: false, compact: false, sound: false, haptics: true, hotkey: 'Alt+Space' },
+  settings: { eodTime: '17:30', workStart: '09:00', workEnd: '18:00', morningBrief: '08:30', staleDaysAfterDue: 3, staleDaysNoDue: 5, mcpReadOnly: false, compact: false, sound: false, haptics: true, hotkey: 'Alt+Space', jiraBaseUrl: '', captureTemplates: [] },
   today: { slipping: [], overdue: [], today: [], waitingStale: [], inbox: [], checkIn: [] },
   openItems: [], summaries: [], tags: [], auditLog: [], snoozedCount: 0, now: Date.now(),
 };
@@ -20,6 +21,7 @@ const defaultUi: UiState = {
   density: 'comfortable', appearance: 'system', accent: 'graphite', pinnedPeople: [], collapsed: [], pinOrder: [], savedFilters: [], lastNav: 'today',
   sidebarHidden: false, todayGroup: 'section', todayFocus: false, peopleLayout: 'list', peopleSort: 'name', soundSave: 'Tink', soundComplete: 'Glass',
   soundUndo: 'Pop', welcomeSeen: true, lastSeenVersion: null, autoUpdateCheck: true, dismissedCheckIns: { day: '', ids: [] },
+  trayText: 'count', pauseUntil: null, wrapupDay: '', burstDay: '', showDates: true,
 };
 
 export const snapshot = signal<Snapshot>(emptySnapshot);
@@ -73,6 +75,7 @@ export function navTitle(n: Nav): string {
   if (n === 'people') return 'People';
   if (n === 'releases') return "What's new";
   if (n === 'done') return 'Done';
+  if (n === 'review') return 'Weekly review';
   if (n === 'snoozed') return 'Snoozed';
   if (n.startsWith('filter:')) return n.slice(7);
   if (n.startsWith('tag:')) return `#${n.slice(4)}`;
@@ -381,3 +384,29 @@ export { parseCapture };
 export const snoozePresets = (now = Date.now()): SnoozePreset[] => presetsAt(now, (ms) => Fmt.short(ms, 'HH:mm'));
 export type { SnoozePreset };
 
+
+// ---- added by ui-speed (0.2.0)
+/** Today is filtered to one person (click an avatar in a row); null = everyone. Not persisted. */
+export const todayPersonFilter = signal<string | null>(null);
+/** the ⌘P "Jump to a person" palette */
+export const showPeoplePalette = signal(false);
+
+export function filterTodayBy(personId: string) { todayPersonFilter.value = personId; go('today'); }
+
+/** snoozePresets plus "Until next 1:1 with Sara (Fri 23 Oct)" when the item's person has a cadence and that day is still ahead. */
+export function snoozePresetsFor(item?: Pick<Item, 'personId'> | null, now = Date.now()): SnoozePreset[] {
+  const base = snoozePresets(now);
+  const s = item?.personId ? summary(item.personId) : undefined;
+  const extra = nextOneOnOnePreset(s?.person, s?.lastInteraction ?? null, now, nextOneOnOneAt, (ms) => Fmt.short(ms, 'EEE d MMM'));
+  return extra ? [...base, extra] : base;
+}
+
+/** "Hi Sara, quick check-in on <title>. Any update?" to the clipboard. */
+export function copyNudge(i: Item) {
+  const p = person(i.personId);
+  if (!p) return;
+  void api.copyText(nudgeText(p.name, i.title));
+  showToast(`Nudge copied · ${p.name.split(/\s+/)[0]}`);
+}
+
+export const pauseNotifications = (until: number | null) => api.pauseNotifications(until);

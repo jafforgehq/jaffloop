@@ -17,6 +17,7 @@ Capture in one line. Everything stays on your Mac. Claude can read and write you
 - **Keyboard-first lists**, **undo** (⌘Z toast), an editable details drawer, inline title and date editing, multi-select with bulk actions, and drag-to-assign.
 - **Done** and **Snoozed** views, saved search filters, back and forward, and a hideable sidebar.
 - **1:1 mode** for the meeting itself, private notes per person, and people as a list or grid.
+- **Weekly review** with your kept-promise rate and a one-click Markdown status update, a rhythm grid of 1:1s, workload bars, anniversaries and birthdays, capture templates, Jira links, and a Dock badge.
 - **Local notifications** with Done / Snooze actions, quiet hours, and batching.
 - **What's new and roadmap** inside the app, shown once after you update. See also [`docs/CHANGELOG.md`](docs/CHANGELOG.md) and [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - **MCP server** (`jaffloop-mcp`) with 12 tools and 3 resources, a read-only mode, per-person hiding, and an audit log.
@@ -53,6 +54,14 @@ Capture in one line. Everything stays on your Mac. Claude can read and write you
 | --- | --- |
 | ![Done](docs/screenshots/done.png) | ![Snoozed](docs/screenshots/snoozed.png) |
 
+| Weekly review | Capture with context |
+| --- | --- |
+| ![Weekly review](docs/screenshots/review.png) | ![Capture context](docs/screenshots/capture-context.png) |
+
+| Jump to a person (⌘P) | |
+| --- | --- |
+| ![People palette](docs/screenshots/people-palette.png) | |
+
 | Keyboard shortcuts (press ?) | First run |
 | --- | --- |
 | ![Shortcuts](docs/screenshots/shortcuts.png) | ![Welcome](docs/screenshots/welcome.png) |
@@ -75,6 +84,7 @@ In any list (Today, Ledger, person pages, tags):
 | `⌘Z` | Undo, while the toast is showing |
 | `⌘K` | Search (and save a search as a sidebar filter) |
 | `?` | Show every shortcut |
+| `⌘P` | Jump to a person |
 | `⌘[` `⌘]` | Back and forward |
 | `⌘\` | Hide or show the sidebar |
 

@@ -3,8 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Item, ParsedCapture, TokenRole } from '../../shared/types';
 import { Icon } from '../components/icons';
 import { Avatar, Chip, Dot, Kbd, KIND_VAR, KindLabel, LoopRing } from '../components/ui';
-import { Fmt, parseCapture } from '../core';
-import { api, recentPeople, settings, summaries } from '../model';
+import { Fmt, expandTemplate, parseCapture } from '../core';
+import { api, openItems, recentPeople, settings, summaries } from '../model';
+import { ambientContext } from '../speed-logic';
 import { atQuery, capitalize, completeAt, highlightSegments, hm, suggestionsFor } from './capture-logic';
 import { sleep, useReady } from './util';
 
@@ -72,6 +73,9 @@ export function CaptureWindow() {
   const q = atQuery(text);
   const suggestions = suggestionsFor(q, recentPeople.value);
   const empty = text === '';
+  // a template (`prep @sara`) saves several items: main expands it, we only show what will happen
+  const expanded = useMemo(() => (empty ? null : expandTemplate(text, settings.value.captureTemplates)), [text, settings.value.captureTemplates]);
+  const expandedParsed = useMemo(() => (expanded ?? []).map((l) => parseCapture(l, { eod: hm(settings.value.eodTime) })), [expanded, settings.value.eodTime]);
 
   const submit = async (stay: boolean) => {
     const line = text;
@@ -108,6 +112,8 @@ export function CaptureWindow() {
   };
 
   const who = parsed.personHandle ? summaries.value.find((s) => s.person.handle === parsed.personHandle)?.person : undefined;
+  // under the field (not for templates: the window is only 380 high): what you know about the person once the @handle is complete (not while it is being typed)
+  const ambient = q === null && who && !expanded ? ambientContext(summaries.value.find((s) => s.person.id === who.id), openItems.value) : null;
   const preview: Item = {
     id: 'preview', kind: parsed.kind, title: parsed.title || 'Untitled', body: null, quote: parsed.quote, personId: who?.id ?? null, status: 'open',
     dueAt: parsed.dueAt, dueHasTime: parsed.dueHasTime, remindAt: null, snoozedUntil: null, snoozeCount: 0, recurRule: null, pinned: parsed.pinned,
@@ -143,6 +149,7 @@ export function CaptureWindow() {
           <>
             <div class="cap-chips">
               <Chip><Dot kind={parsed.kind} /><span class="mono">{parsed.kind}</span></Chip>
+              {expanded && <Chip title="Capture template"><Icon name="list" size={11} />template: {text.trim().split(/\s+/)[0]!.toLowerCase()}, {expanded.length} item{expanded.length === 1 ? '' : 's'}</Chip>}
               {parsed.personHandle && (who
                 ? <Chip><Avatar person={who} size={14} />{who.name}</Chip>
                 : <Chip><Icon name="plus" size={10} />create {capitalize(parsed.personHandle)}</Chip>)}
@@ -154,7 +161,14 @@ export function CaptureWindow() {
               {parsed.inbox && <Chip><span class="dim row-flex gap6"><Icon name="tray" size={11} />inbox</span></Chip>}
             </div>
             <hr class="hairline" />
-            <div class="cap-prev" aria-label={`Preview: ${preview.title}, ${parsed.kind}`}>
+            {expanded ? expandedParsed.slice(0, 3).map((e, i) => (
+              <div key={i} class="cap-prev" aria-label={`Template item ${i + 1}: ${e.title}, ${e.kind}`}>
+                <span style={{ opacity: 0.7, display: 'inline-flex' }}><LoopRing size={14} line={1.4} /></span>
+                <span class="grow cap-prev-title">{e.title || 'Untitled'}</span>
+                <span class="c-kind" style={{ width: 'var(--col-kind)' }}><KindLabel kind={e.kind} /></span>
+                <span class="c-date" style={{ width: 'var(--col-date)' }}>{Fmt.due({ dueAt: e.dueAt, dueHasTime: e.dueHasTime }) ?? (e.inbox ? 'Inbox' : '')}</span>
+              </div>
+            )) : <div class="cap-prev" aria-label={`Preview: ${preview.title}, ${parsed.kind}`}>
               <span style={{ opacity: 0.7, display: 'inline-flex' }}><LoopRing size={14} line={1.4} /></span>
               <span class="grow cap-prev-title">{preview.title}</span>
               {parsed.pinned && <span class="dim" style={{ display: 'inline-flex' }}><Icon name="pin" size={10} /></span>}
@@ -163,7 +177,22 @@ export function CaptureWindow() {
                 {who && <><Avatar person={who} size={16} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{who.name.split(/\s+/)[0]}</span></>}
               </span>
               <span class="c-date" style={{ width: 'var(--col-date)' }}>{Fmt.due(preview) ?? (parsed.inbox ? 'Inbox' : '')}</span>
-            </div>
+            </div>}
+            {ambient && (
+              <>
+                <hr class="hairline" />
+                <div class="cap-ambient" aria-label={`About ${who!.name}`}>
+                  {ambient.notes && <div class="cap-notes ellipsis" title={who!.notes}>{ambient.notes}</div>}
+                  <div class="cap-ambient-line">
+                    {ambient.owes.map((o) => (
+                      <span key={o.id} class="cap-owe"><Dot kind="owe" /><span class="ellipsis">{o.title}</span>{Fmt.due(o) && <span class="dim">{Fmt.due(o)}</span>}</span>
+                    ))}
+                    <span class="grow" />
+                    <span class="mono dim">{ambient.last}</span>
+                  </div>
+                </div>
+              </>
+            )}
             {q !== null && (suggestions.length > 0 || q !== '') && (
               <>
                 <hr class="hairline" />

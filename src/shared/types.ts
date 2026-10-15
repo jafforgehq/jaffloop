@@ -45,6 +45,10 @@ export interface Person {
   archived: boolean;
   /** private notes; never exposed over MCP */
   notes: string;
+  /** work anniversary, 'YYYY-MM-DD' (private, not exposed over MCP) */
+  startDate: string | null;
+  /** birthday, 'MM-DD' (private, not exposed over MCP) */
+  birthday: string | null;
 }
 
 export interface Interaction {
@@ -96,6 +100,18 @@ export interface Settings {
   haptics: boolean;
   /** Electron accelerator, e.g. "Alt+Space". (The Swift app stored "opt+space"; core converts on read.) */
   hotkey: string;
+  /** base for Jira keys, e.g. 'https://acme.atlassian.net/browse/'; empty = keys are not links */
+  jiraBaseUrl: string;
+  /** capture templates, stored as JSON in the settings table */
+  captureTemplates: CaptureTemplate[];
+}
+
+/** `prep @sara` expands to the template's lines with {person} replaced by the handle and {rest} by the text after the person. */
+export interface CaptureTemplate {
+  /** the trigger word, lower case, no spaces */
+  name: string;
+  /** capture lines, e.g. ['bring @{person} how are things going', 'bring @{person} career goals'] */
+  lines: string[];
 }
 
 export interface ItemFilter {
@@ -157,4 +173,69 @@ export interface Snapshot {
   snoozedCount: number;
   /** wall clock of the main process at the time of the snapshot */
   now: number;
+}
+
+// ---------------------------------------------------------------- 0.2.0 features
+
+export interface KeptRate {
+  /** days looked back */
+  periodDays: number;
+  /** promises (kind owe) completed on or before their due date, or with no due date */
+  onTime: number;
+  /** completed after the due date */
+  late: number;
+  total: number;
+  /** onTime / total, null when total is 0 */
+  rate: number | null;
+}
+
+/** Everything the weekly review screen shows, for the window [from, to). */
+export interface ReviewData {
+  from: number;
+  to: number;
+  /** open items snoozed three or more times */
+  slipped: Item[];
+  /** open waiting-on items past the stale rule */
+  staleWaits: Item[];
+  /** open promises (owe) past their due date */
+  overduePromises: Item[];
+  /** people past their 1:1 cadence, most overdue first */
+  offCadence: PersonSummary[];
+  /** completed in the window */
+  closed: Item[];
+  /** dropped in the window */
+  dropped: Item[];
+  /** created in the window */
+  created: Item[];
+  keptRate: KeptRate;
+}
+
+export type ActivityEvent = 'created' | 'completed' | 'dropped' | 'snoozed' | 'reopened' | 'edited';
+export interface ActivityEntry {
+  at: number;
+  event: ActivityEvent;
+  /** the item as it is now (may be done or dropped) */
+  item: Item;
+}
+
+/** One person's last N weeks: was there a 1:1 each week? (oldest first) */
+export interface HeatRow {
+  personId: string;
+  weeks: boolean[];
+}
+
+export interface UpcomingDate {
+  personId: string;
+  kind: 'anniversary' | 'birthday';
+  /** midnight of the next occurrence */
+  on: number;
+  inDays: number;
+  /** completed years for an anniversary; null for a birthday */
+  years: number | null;
+}
+
+/** A run of text in an item title: plain, or a link (Jira key or URL). */
+export interface LinkSegment {
+  text: string;
+  href?: string;
 }

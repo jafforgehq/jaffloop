@@ -4,7 +4,7 @@
 import { useEffect, useRef } from 'preact/hooks';
 import type { Item } from '../../shared/types';
 import {
-  completeMany, drawerItemId, dropMany, drop, multi, selectedItemId, showSearch, showShortcuts, showWelcome, snooze, snoozeMany, snoozePresets, toggleDrawer,
+  completeMany, drawerItemId, dropMany, drop, multi, selectedItemId, showPeoplePalette, showSearch, showShortcuts, showWelcome, snooze, snoozeMany, snoozePresets, toggleDrawer,
   toggleMulti, togglePin, triggerComplete, triggerEdit,
 } from '../model';
 import { moveSelection, neighbour } from '../ui-logic';
@@ -28,7 +28,7 @@ export function useItemKeys(items: Item[], opts?: ItemKeysOptions) {
       // a focused button or an open menu handles Enter/space/arrows itself
       if (document.querySelector('.menu') || (active?.matches('button, a') && (e.key === 'Enter' || e.key === ' '))) return;
       const key = e.key;
-      const overlay = showSearch.value || showShortcuts.value || showWelcome.value;
+      const overlay = showSearch.value || showShortcuts.value || showWelcome.value || showPeoplePalette.value;
       if (overlay && key !== '?') return;
 
       const { items: list, opts: o } = latest.current;

@@ -8,10 +8,12 @@ import { ItemList } from '../components/item-row';
 import { NotesField } from '../components/notes-field';
 import { OneOnOne, SaidRow, useSaidLog } from '../components/one-on-one';
 import { Page } from '../components/page';
+import { StreakChip } from '../components/streak';
 import { CadenceRing, Chip, EmptySection, GhostButton, MenuButton, Popover, PrimaryButton, SectionHeader } from '../components/ui';
 import { useItemKeys } from '../hooks/use-item-keys';
 import { api, captureFor, itemsFor, logInteraction, pulsePersonId, savePerson, summary } from '../model';
 import { firstName, lastStat } from '../people-logic';
+import { birthdayToInput, inputToBirthday, validDateInput } from '../reports-logic';
 
 export function PersonPage({ personId }: { personId: string }) {
   const [oneOnOneId, setOneOnOneId] = useState<string | null>(null); // keyed by person so a page change leaves 1:1 mode
@@ -66,7 +68,7 @@ function PersonBody({ s, startOneOnOne }: { s: PersonSummary; startOneOnOne: () 
           </Popover>
           {p.hiddenFromClaude && <Chip><Icon name="eyeslash" size={11} />hidden from Claude</Chip>}
         </div>
-        <div style={{ marginTop: 2 }}><CadenceStripView person={p} /></div>
+        <div class="row-flex gap10" style={{ marginTop: 2, flexWrap: 'wrap' }}><CadenceStripView person={p} /><StreakChip person={p} /></div>
         <div style={{ maxWidth: 520, marginTop: 4 }}><NotesField key={p.id} person={p} /></div>
       </div>
     </div>
@@ -120,6 +122,22 @@ function PersonEditor({ person, onDone }: { person: Person; onDone: () => void }
         </span>
       </div>
       <input class="input" value={draft.matchEmails} placeholder="Emails (comma separated)" aria-label="Emails" onInput={(e) => set('matchEmails', (e.target as HTMLInputElement).value)} />
+      <div class="form-line">
+        <label for="pe-start">Start date</label>
+        <span class="row-flex gap6">
+          <input id="pe-start" type="date" class="input date-input" aria-label="Start date" value={draft.startDate ?? ''}
+            onInput={(e) => set('startDate', validDateInput((e.target as HTMLInputElement).value))} />
+          <button type="button" class="btn quiet icon" aria-label="Clear start date" title="Clear" disabled={!draft.startDate} onClick={() => set('startDate', null)}><Icon name="xmark" size={11} /></button>
+        </span>
+      </div>
+      <div class="form-line">
+        <label for="pe-birthday">Birthday</label>
+        <span class="row-flex gap6">
+          <input id="pe-birthday" type="date" class="input date-input" aria-label="Birthday (year is ignored)" title="Only the month and day are kept" value={birthdayToInput(draft.birthday)}
+            onInput={(e) => set('birthday', inputToBirthday((e.target as HTMLInputElement).value))} />
+          <button type="button" class="btn quiet icon" aria-label="Clear birthday" title="Clear" disabled={!draft.birthday} onClick={() => set('birthday', null)}><Icon name="xmark" size={11} /></button>
+        </span>
+      </div>
       <label class="toggle"><input type="checkbox" checked={draft.hiddenFromClaude} onChange={(e) => set('hiddenFromClaude', (e.target as HTMLInputElement).checked)} />Hide from Claude (MCP)</label>
       <label class="toggle"><input type="checkbox" checked={draft.archived} onChange={(e) => set('archived', (e.target as HTMLInputElement).checked)} />Archived</label>
       <div class="row-flex" style={{ justifyContent: 'flex-end' }}><PrimaryButton onClick={submit} disabled={!draft.name.trim()}>Save</PrimaryButton></div>

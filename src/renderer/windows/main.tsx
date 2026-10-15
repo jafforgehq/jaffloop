@@ -6,9 +6,11 @@ import { ItemDrawer } from '../components/drawer';
 import { Icon } from '../components/icons';
 import { Sidebar } from '../components/sidebar';
 import { BulkBar, ToastBar } from '../components/toast';
+import { WrapupCard } from '../components/wrapup';
 import {
-  api, drawerItem, drawerItemId, nav, navTitle, openItems, refreshDrawerItem, showSearch, showShortcuts, showWelcome, summaries, ui,
+  api, drawerItem, drawerItemId, nav, navTitle, openItems, refreshDrawerItem, showPeoplePalette, showSearch, showShortcuts, showWelcome, summaries, ui,
 } from '../model';
+import { PeoplePalette } from '../overlays/people-palette';
 import { SearchPalette } from '../overlays/search';
 import { ShortcutsView } from '../overlays/shortcuts';
 import { WelcomeView } from '../overlays/welcome';
@@ -19,6 +21,7 @@ import { LedgerPage } from '../pages/ledger';
 import { PeoplePage } from '../pages/people';
 import { PersonPage } from '../pages/person';
 import { ReleasesPage } from '../pages/releases';
+import { ReviewPage } from '../pages/review';
 import { SnoozedPage } from '../pages/snoozed';
 import { TagPage } from '../pages/tag';
 import { TodayPage } from '../pages/today';
@@ -30,6 +33,7 @@ function CurrentPage() {
   if (n === 'people') return <PeoplePage />;
   if (n === 'releases') return <ReleasesPage />;
   if (n === 'done') return <DonePage />;
+  if (n === 'review') return <ReviewPage />;
   if (n === 'snoozed') return <SnoozedPage />;
   if (n.startsWith('filter:')) return <FilterPage key={n} query={n.slice(7)} />;
   if (n.startsWith('person:')) return <PersonPage key={n} personId={n.slice(7)} />;
@@ -48,14 +52,19 @@ export function MainWindow() {
     // Esc closes the drawer when no list handled it (lists clear marks and selection first)
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (showShortcuts.value || showSearch.value || showWelcome.value) return; // the overlays close themselves
+      if (showShortcuts.value || showSearch.value || showWelcome.value || showPeoplePalette.value) return; // the overlays close themselves
       if (drawerItemId.value) { drawerItemId.value = null; e.preventDefault(); }
     };
     // a mouse click must not leave focus on a button, or Enter/space would activate it instead of the list keys
+    // ⌘P jumps to a person (the menu has no ⌘P)
+    const onPeople = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') { e.preventDefault(); showPeoplePalette.value = !showPeoplePalette.value; }
+    };
     const onClick = (e: MouseEvent) => { if (e.detail > 0) (e.target as HTMLElement | null)?.closest?.('button')?.blur(); };
     window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onPeople);
     window.addEventListener('click', onClick);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('click', onClick); };
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keydown', onPeople); window.removeEventListener('click', onClick); };
   }, []);
 
   const hidden = ui.value.sidebarHidden;
@@ -77,10 +86,12 @@ export function MainWindow() {
       )}
 
       {showSearch.value && <SearchPalette />}
+      <PeoplePalette />
       {showShortcuts.value && <ShortcutsView />}
       {showWelcome.value && <WelcomeView />}
 
       <div class="toast-wrap"><ToastBar /><BulkBar /></div>
+      <WrapupCard />
     </div>
   );
 }

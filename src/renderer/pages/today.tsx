@@ -1,5 +1,8 @@
 // Today: what needs you now, grouped by section, person or kind; Focus shows only the top 3. Ported from MainView.swift TodayView.
+import { useEffect, useState } from 'preact/hooks';
 import { AllClosed } from '../components/all-closed';
+import { Burst } from '../components/burst';
+import { DateChips } from '../components/date-chips';
 import { Icon } from '../components/icons';
 import { ItemList } from '../components/item-row';
 import { Page, SectionBlock } from '../components/page';
@@ -9,7 +12,8 @@ import type { PersonSummary } from '../../shared/types';
 import { ITEM_KINDS } from '../../shared/types';
 import type { TodayGroup } from '../../shared/api';
 import { useItemKeys } from '../hooks/use-item-keys';
-import { api, dismissCheckIn, dismissedCheckIns, go, isCollapsed, openItems, orderedItems, person, snapshot, ui } from '../model';
+import { api, dismissCheckIn, dismissedCheckIns, drawerItemId, go, isCollapsed, openItems, orderedItems, person, showPeoplePalette, showSearch, showShortcuts, snapshot, todayPersonFilter, ui } from '../model';
+import { filterToday, localDay, shouldBurst, urgentCount } from '../speed-logic';
 import { todayBlocks, todayTotal } from '../ui-logic';
 
 function KindMix() {
@@ -42,8 +46,16 @@ function CheckInRow({ s }: { s: PersonSummary }) {
   );
 }
 
+/** the urgent count last seen by any Today page this session; null until the first one (so nothing bursts on first load) */
+let lastUrgent: number | null = null;
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 export function TodayPage() {
-  const t = snapshot.value.today;
+  const everyone = snapshot.value.today;
+  const who = person(todayPersonFilter.value);
+  const t = filterToday(everyone, who?.id ?? null);
+  const [burst, setBurst] = useState(false);
+  const urgent = urgentCount(everyone);
   const group = ui.value.todayGroup;
   const focus = ui.value.todayFocus;
   const checkIns = t.checkIn.filter((s) => !dismissedCheckIns.value.has(s.person.id));
@@ -52,6 +64,28 @@ export function TodayPage() {
   const total = todayTotal(t);
   const snoozed = snapshot.value.snoozedCount;
   useItemKeys(visible);
+
+  useEffect(() => {
+    const prev = lastUrgent;
+    lastUrgent = urgent;
+    const today = localDay(Date.now());
+    if (!shouldBurst(prev, urgent, ui.peek().burstDay, today) || reducedMotion()) return;
+    setBurst(true);
+    void api.setUiState({ burstDay: today });
+  }, [urgent]);
+
+  // Esc clears the person filter once nothing else (marks, drawer, selection, overlays) took it
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || !todayPersonFilter.value) return;
+      if (showSearch.value || showShortcuts.value || showPeoplePalette.value || drawerItemId.value || document.querySelector('.menu')) return;
+      if ((document.activeElement as HTMLElement | null)?.matches('input, textarea, select')) return;
+      todayPersonFilter.value = null;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const header = (
     <>
@@ -65,12 +99,22 @@ export function TodayPage() {
           <Icon name="scope" size={13} /> Focus
         </button>
       </div>
+      {who && (
+        <div class="filter-row">
+          <span class="chip filter-chip">Showing {who.name.split(/\s+/)[0]}
+            <button type="button" aria-label="Show everyone" title="Show everyone  esc" onClick={() => { todayPersonFilter.value = null; }}><Icon name="xmark" size={9} /></button>
+          </span>
+        </div>
+      )}
     </>
   );
 
   return (
     <Page title="Today" subtitle={Fmt.short(Date.now(), 'EEEE, d MMMM')} header={header}>
-      {total === 0 && checkIns.length === 0 ? <AllClosed /> : (
+      {burst && <Burst onDone={() => setBurst(false)} />}
+      {total === 0 && checkIns.length === 0 ? (who
+        ? <AllClosed title={`Nothing for ${who.name.split(/\s+/)[0]}`} message="No open items for them need you today." showCapture={false} />
+        : <AllClosed />) : (
         <div>
           {blocks.map((b) => (
             <SectionBlock key={b.id} id={`today.${b.id}`} title={b.title} count={b.items.length} tint={b.tint}><ItemList items={b.items} /></SectionBlock>
@@ -80,6 +124,7 @@ export function TodayPage() {
           ) : checkIns.length > 0 && (
             <div class="section"><SectionHeader title="Check in" count={checkIns.length} />{checkIns.map((s) => <CheckInRow key={s.person.id} s={s} />)}</div>
           )}
+          {!focus && <DateChips />}
           {snoozed > 0 && (
             <button type="button" class="link-btn dim" style={{ marginTop: 14 }} onClick={() => go('snoozed')}>
               <Icon name="moon" size={12} /> {snoozed} snoozed

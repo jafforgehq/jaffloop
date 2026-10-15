@@ -11,6 +11,7 @@ import { Hotkey } from './hotkey';
 import { registerIpc } from './ipc';
 import { installMenu } from './menu';
 import { Notifier } from './notifications';
+import { nextTrayText } from './tray-text';
 import { TrayController } from './tray';
 import { readLegacyPrefs, UiStateStore } from './ui-state';
 import { UpdateService } from './update-service';
@@ -40,6 +41,8 @@ let notifier!: Notifier;
 let updates: UpdateService | null = null;
 let lastDataVersion = 0;
 let quitting = false;
+/** the last Dock badge string (the e2e hook reads it: a Dock cannot be inspected) */
+let lastBadge = '';
 
 const log = (m: string): void => { try { fs.appendFileSync(path.join(userData, 'main.log'), `${new Date().toISOString()} ${m.replace(/\s+/g, ' ').slice(0, 500)}\n`); } catch { /* logging never breaks the app */ } };
 
@@ -74,10 +77,13 @@ async function start(): Promise<void> {
   ui = new UiStateStore(path.join(userData, 'ui-state.json'));
   ui.onChange = (s: UiState, patch) => {
     if (patch.appearance) nativeTheme.themeSource = patch.appearance;
+    if (patch.trayText !== undefined) refreshTray();
+    if (patch.pauseUntil !== undefined) notifier?.reschedule();
     windows?.broadcast('ui-state', s);
   };
   await ui.load(isolated ? undefined : () => readLegacyPrefs());
   nativeTheme.themeSource = ui.get().appearance;
+  { const p = ui.get().pauseUntil; if (p !== null && p <= Date.now()) ui.set({ pauseUntil: null }); } // a pause that ran out while the app was closed
 
   if (!app.isPackaged) {
     const icon = nativeImage.createFromPath(path.join(appRoot, 'build', 'icon.png'));
@@ -91,6 +97,8 @@ async function start(): Promise<void> {
     onCapture: () => windows.showCapture(),
     onOpen: () => openMain(),
     onSettings: () => windows.openSettings(),
+    pausedUntil: () => ui.get().pauseUntil,
+    onPause: (until) => { ui.set({ pauseUntil: until }); },
   });
   windows = new Windows({
     preload: path.join(distMain, 'preload.cjs'),
@@ -113,6 +121,8 @@ async function start(): Promise<void> {
     item: (id) => store.item(id),
     people: () => new Map(store.people(true).map((p) => [p.id, p.name])),
     settings: () => store.settings(),
+    pausedUntil: () => ui.get().pauseUntil,
+    resumed: () => { if (ui.get().pauseUntil !== null) ui.set({ pauseUntil: null }); },
     stateFile: path.join(userData, 'stale-notified.json'),
     done: (id) => { store.complete(id); changed(); },
     snooze: (ids, until) => { for (const id of ids) store.snooze(id, until); changed(); },
@@ -163,7 +173,7 @@ async function start(): Promise<void> {
   }).then((u) => { updates = u; windows.broadcast('update-state', u.state()); }).catch((e) => log(`updates: ${e}`));
 
   // test hook: lets Playwright's app.evaluate reach the pieces that have no window (tray, notifier, popover)
-  if (env.JAFFLOOP_E2E === '1') (globalThis as Record<string, unknown>).__jaffloop = { windows, tray, notifier, hotkey, ui, store, get updates() { return updates; } };
+  if (env.JAFFLOOP_E2E === '1') (globalThis as Record<string, unknown>).__jaffloop = { windows, tray, notifier, hotkey, ui, store, get updates() { return updates; }, get badge() { return lastBadge; }, refreshTray };
 
   const background = argv.includes('--background') && !smoke;
   if (!background) openMain();
@@ -196,7 +206,12 @@ function pollData(): void {
 function refreshTray(): void {
   try {
     const now = Date.now();
-    tray.setCount(store.items({}, now).filter((i) => isOverdue(i, now) || isSlipping(i)).length);
+    const open = store.items({}, now);
+    const n = open.filter((i) => isOverdue(i, now) || isSlipping(i)).length;
+    const next = ui.get().trayText === 'next' ? nextTrayText(open, new Map(store.people(true).map((p) => [p.id, p.name])), now) : null;
+    tray.setCount(n, next);
+    lastBadge = n > 0 ? String(n) : '';
+    app.dock?.setBadge(lastBadge);
   } catch (e) { log(`tray: ${e}`); }
 }
 

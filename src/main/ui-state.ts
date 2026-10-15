@@ -10,6 +10,7 @@ export const DEFAULT_UI: UiState = {
   lastNav: 'today', sidebarHidden: false, todayGroup: 'section', todayFocus: false, peopleLayout: 'list', peopleSort: 'name',
   soundSave: 'Tink', soundComplete: 'Glass', soundUndo: 'Pop', welcomeSeen: false, lastSeenVersion: null, autoUpdateCheck: true,
   dismissedCheckIns: { day: '', ids: [] },
+  trayText: 'count', pauseUntil: null, wrapupDay: '', burstDay: '', showDates: true,
 };
 
 const ENUMS: Partial<Record<keyof UiState, readonly string[]>> = {
@@ -19,6 +20,7 @@ const ENUMS: Partial<Record<keyof UiState, readonly string[]>> = {
   todayGroup: ['section', 'person', 'kind'] satisfies TodayGroup[],
   peopleLayout: ['list', 'grid'] satisfies PeopleLayout[],
   peopleSort: ['name', 'urgency', 'last'] satisfies PeopleSort[],
+  trayText: ['count', 'next'] satisfies Array<UiState['trayText']>,
 };
 
 const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
@@ -34,6 +36,7 @@ export function sanitizeUi(raw: unknown): Partial<UiState> {
     if (v === undefined) continue;
     const allowed = ENUMS[k];
     if (allowed) { if (typeof v === 'string' && allowed.includes(v)) out[k] = v; continue; }
+    if (k === 'pauseUntil') { if (v === null || (typeof v === 'number' && Number.isFinite(v))) out[k] = v; continue; }
     if (k === 'lastSeenVersion') { if (v === null || typeof v === 'string') out[k] = v; continue; }
     if (k === 'dismissedCheckIns') {
       const x = v as { day?: unknown; ids?: unknown };

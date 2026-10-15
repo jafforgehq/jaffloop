@@ -37,6 +37,10 @@ const P: Record<string, JSX.Element> = {
   drive: <><rect x="2" y="9" width="12" height="4.5" rx="1.5" /><path d="M3.5 9l1.5-5.5h6L12.5 9M11.5 11.2h.01" /></>,
   window: <><rect x="2" y="3" width="12" height="10" rx="2" /><path d="M2 6h12M4 4.5h.01M5.5 4.5h.01" /></>,
   gear: <><circle cx="8" cy="8" r="2" /><path d="M8 1.8v1.7M8 12.5v1.7M1.8 8h1.7M12.5 8h1.7M3.6 3.6l1.2 1.2M11.2 11.2l1.2 1.2M3.6 12.4l1.2-1.2M11.2 4.8l1.2-1.2" /></>,
+  review: <><rect x="3" y="2.5" width="10" height="11.5" rx="1.8" /><path d="M6 2.5h4v1.6H6ZM5.7 8.6l1.6 1.6 3-3.4" /></>,
+  cake: <><path d="M3 13.5h10v-4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1ZM3 11.3c1.2 0 1.2.9 2.5.9s1.3-.9 2.5-.9 1.3.9 2.5.9 1.3-.9 3-.9M8 8.5V6M8 4.8c-.6-.6-.6-1.2 0-2 .6.8.6 1.4 0 2Z" /></>,
+  pencil: <path d="M10.5 3l2.5 2.5-7 7L3 13l.5-3Z" />,
+  copy: <><rect x="5.5" y="5.5" width="8" height="8" rx="1.8" /><path d="M10.5 5.5v-1a1.8 1.8 0 0 0-1.8-1.8H4.5a1.8 1.8 0 0 0-1.8 1.8v4.2a1.8 1.8 0 0 0 1.8 1.8h1" /></>,
 };
 
 export function Icon({ name, size = 14, class: cls }: { name: string; size?: number; class?: string }) {

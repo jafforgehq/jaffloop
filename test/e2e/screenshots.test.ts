@@ -29,7 +29,10 @@ describe('screens', () => {
     await resize(l.app, 'main', 1080, 800);
     const go = async (nav: string) => { await w.evaluate((n) => window.jaffloop.openMain(n), nav); await new Promise((r) => setTimeout(r, 450)); };
     // the demo data is "an update from the Swift app" for the first-run logic: start from Today and mark the release seen
-    await w.evaluate(() => window.jaffloop.setUiState({ lastSeenVersion: '0.1.0', welcomeSeen: true, appearance: 'dark' }));
+    await w.evaluate(() => window.jaffloop.setUiState({ lastSeenVersion: '0.2.0', welcomeSeen: true, appearance: 'dark', wrapupDay: new Date().toLocaleDateString('sv-SE') }));
+    // the end-of-day card may already be showing (it appears at once after the end-of-day time): dismiss it for the screenshots
+    const wrap = w.getByTestId('wrapup');
+    if (await wrap.count()) await wrap.getByRole('button', { name: 'Dismiss' }).click();
     await go('today');
     await shot(w, 'today-dark');
     expect(await w.locator('.row').count()).toBeGreaterThan(5);
@@ -43,7 +46,7 @@ describe('screens', () => {
 
     const people = await w.evaluate(async () => (await window.jaffloop.snapshot()).summaries.map((s) => ({ id: s.person.id, handle: s.person.handle })));
     const sara = people.find((p) => p.handle === 'sara')!;
-    for (const [nav, name] of [['ledger', 'ledger'], ['inbox', 'inbox'], ['done', 'done'], ['snoozed', 'snoozed'], [`person:${sara.id}`, 'person'], ['releases', 'whats-new']] as const) {
+    for (const [nav, name] of [['ledger', 'ledger'], ['inbox', 'inbox'], ['review', 'review'], ['done', 'done'], ['snoozed', 'snoozed'], [`person:${sara.id}`, 'person'], ['releases', 'whats-new']] as const) {
       await go(nav);
       await shot(w, name);
     }
@@ -67,6 +70,11 @@ describe('screens', () => {
     await shot(w, 'shortcuts');
     await w.keyboard.press('Escape');
 
+    await w.keyboard.press('Meta+p');
+    await new Promise((r) => setTimeout(r, 400));
+    await shot(w, 'people-palette');
+    await w.keyboard.press('Escape');
+
     // other windows
     await w.evaluate(() => window.jaffloop.openSettings('general'));
     const settings = await l.waitView('settings'); await shot(settings, 'settings-general');
@@ -80,10 +88,12 @@ describe('screens', () => {
     const cap = await l.waitView('capture');
     await cap.locator('input').first().fill('owe @sara review RFC fri #rfc !');
     await new Promise((r) => setTimeout(r, 400)); await shot(cap, 'capture');
+    await cap.locator('input').first().fill('owe @sara ');
+    await new Promise((r) => setTimeout(r, 500)); await shot(cap, 'capture-context');
     await cap.keyboard.press('Escape');
     await l.app.evaluate(() => (globalThis as unknown as { __jaffloop: { windows: { togglePopover(): void } } }).__jaffloop.windows.togglePopover());
     const pop = await l.waitView('popover'); await new Promise((r) => setTimeout(r, 400)); await shot(pop, 'menubar-popover');
-    expect(fs.readdirSync(OUT).filter((f) => f.endsWith('.png')).length).toBeGreaterThanOrEqual(18);
+    expect(fs.readdirSync(OUT).filter((f) => f.endsWith('.png')).length).toBeGreaterThanOrEqual(21);
   });
 
   it('shows the welcome screen on an empty database', async () => {

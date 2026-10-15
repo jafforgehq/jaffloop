@@ -15,6 +15,22 @@ describe('sanitizeUi', () => {
   });
 });
 
+describe('0.2.0 fields', () => {
+  it('has the defaults', () => {
+    expect(DEFAULT_UI).toMatchObject({ trayText: 'count', pauseUntil: null, wrapupDay: '', burstDay: '', showDates: true });
+  });
+  it('accepts valid values', () => {
+    const v = { trayText: 'next', pauseUntil: 1_800_000_000_000, wrapupDay: '2026-10-14', burstDay: '2026-10-13', showDates: false };
+    expect(sanitizeUi(v)).toEqual(v);
+    expect(sanitizeUi({ pauseUntil: null })).toEqual({ pauseUntil: null });
+  });
+  it('drops values of the wrong shape', () => {
+    expect(sanitizeUi({ trayText: 'both', pauseUntil: '1', wrapupDay: 5, burstDay: null, showDates: 'yes' })).toEqual({});
+    expect(sanitizeUi({ pauseUntil: Infinity })).toEqual({});
+    expect(sanitizeUi({ pauseUntil: NaN })).toEqual({});
+  });
+});
+
 describe('legacyToUi', () => {
   it('maps the Swift preferences and never imports autoUpdateCheck', () => {
     const u = legacyToUi({

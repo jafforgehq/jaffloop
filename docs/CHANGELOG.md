@@ -2,6 +2,19 @@
 
 Also shown inside the app (What's new). Newest first.
 
+## 0.2.0 (2026-10-15): Review, rhythm and small time-savers
+
+- Weekly review: one page with overdue promises, slipped items, stale waits, people past their 1:1 cadence and what you closed, with your kept-promise rate. Copy the week as Markdown for your status update.
+- Done gets a kept-promise stat and a "Today in review" timeline of what you did.
+- End-of-day wrap-up card at your end of day: what you closed, what is still overdue.
+- People: a 12-week rhythm grid of 1:1s, a workload bar per person, and a 1:1 streak on each person page.
+- Work anniversaries and birthdays (optional dates per person) show as reminders under Check in.
+- Capture bar shows context while you type @name: notes, open promises and the last 1:1. Capture templates (prep @sara) create a set of items at once.
+- Snooze until your next 1:1 with that person. Jump to a person with ⌘P. Click a person on any row to filter Today to them.
+- Copy a nudge message for a stale wait. Jira keys (PLAT-482) and web addresses in titles are clickable links.
+- Dock badge with your overdue count, pause notifications from the menu bar, and an option to show your next item in the menu bar.
+- A small ring burst when you clear Overdue and Inbox.
+
 ## 0.1.0 (2026-10-15): Now built on Electron
 
 - Same app, same data, same shortcuts, rebuilt on Electron.

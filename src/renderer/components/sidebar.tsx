@@ -122,6 +122,7 @@ export function Sidebar() {
         <NavItem icon="person2" title="People" to="people" />
         <NavItem icon="moon" title="Snoozed" to="snoozed" count={snapshot.value.snoozedCount} tip="Hidden until later" />
         <NavItem icon="circlecheck" title="Done" to="done" />
+        <NavItem icon="review" title="Review" to="review" tip="Weekly review" />
       </div>
 
       <div class="sidebar-scroll" ref={scroller}>

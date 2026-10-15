@@ -6,24 +6,26 @@ import type { Density } from '../../shared/api';
 import type { Item } from '../../shared/types';
 import { Fmt } from '../core';
 import {
-  complete, dragPayload, drop, movePin, multi, openItems, person, rename, selectedItemId, settings, snooze, snoozePresets, toggleMulti, togglePin,
+  complete, copyNudge, dragPayload, drop, filterTodayBy, movePin, multi, openItems, person, rename, selectedItemId, settings, snooze, snoozePresetsFor, toggleMulti, togglePin,
   triggerComplete, triggerEdit, ui, updateItem, drawerItemId,
 } from '../model';
+import { firstName as firstOf } from '../speed-logic';
 import { Dropdown } from './dropdown';
 import { DueEditor } from './due-editor';
 import { Icon } from './icons';
+import { LinkedTitle } from './linked-title';
 import { Avatar, KindLabel, LoopRing, Popover, openContextMenu } from './ui';
 
 const PAD: Record<Density, number> = { compact: 4, comfortable: 7, spacious: 11 };
-const firstName = (name: string) => name.split(/\s+/)[0] ?? name;
+const firstName = firstOf;
 
 /** Snooze menu (presets + a custom date). `onPick` gets the epoch ms to come back at. */
-export function SnoozeMenu({ onPick, label = 'Snooze', face, className }: { onPick: (until: number) => void; label?: string; face?: preact.ComponentChildren; className?: string }) {
+export function SnoozeMenu({ onPick, label = 'Snooze', face, className, item }: { onPick: (until: number) => void; label?: string; face?: preact.ComponentChildren; className?: string; item?: Pick<Item, 'personId'> | null }) {
   const [custom, setCustom] = useState(false);
   const [value, setValue] = useState(() => toLocalInput(Date.now() + 3 * 3_600_000));
   const wrap = useRef<HTMLSpanElement>(null);
   const items = [
-    ...snoozePresets().map((p) => ({ label: p.label, onClick: () => onPick(p.date) })),
+    ...snoozePresetsFor(item).map((p) => ({ label: p.label, onClick: () => onPick(p.date) })),
     { divider: true },
     { label: 'Custom…', onClick: () => setCustom(true) },
   ];
@@ -109,6 +111,7 @@ export function ItemRow({ item, index = 0, showPerson = true, showKind = true, c
     movePin(payload, item.id);
   };
 
+  const nudge = item.kind === 'wait' && p ? [{ label: 'Copy nudge message', onClick: () => copyNudge(item) }] : [];
   const stale = age != null && Fmt.isStaleWait(item, now, settings.value);
   const level = age != null ? Fmt.ageLevel(age) : 0;
   const rule = item.recurRule;
@@ -127,7 +130,8 @@ export function ItemRow({ item, index = 0, showPerson = true, showKind = true, c
         { label: 'Complete', onClick: finish },
         { label: 'Edit title', onClick: beginEdit },
         { label: 'Details', onClick: details },
-        ...snoozePresets().map((s) => ({ label: `Snooze: ${s.label}`, onClick: () => snoozeRow(s.date) })),
+        ...nudge,
+        ...snoozePresetsFor(item).map((s) => ({ label: `Snooze: ${s.label}`, onClick: () => snoozeRow(s.date) })),
         { divider: true },
         { label: item.pinned ? 'Unpin' : 'Pin to top', onClick: () => { void togglePin(item); } },
         { label: 'Drop', danger: true, onClick: () => { void drop(item); } },
@@ -143,7 +147,7 @@ export function ItemRow({ item, index = 0, showPerson = true, showKind = true, c
             onInput={(e) => setDraft((e.target as HTMLInputElement).value)} onBlur={commitEdit}
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') commitEdit(); else if (e.key === 'Escape') setEditing(false); }} />
         ) : (
-          <div class="row-title" title={item.title} onDblClick={beginEdit}>{item.title}</div>
+          <div class="row-title" title={item.title} onDblClick={beginEdit}><LinkedTitle text={item.title} /></div>
         )}
         {!editing && density !== 'compact' && item.body && <div class="row-body">{item.body}</div>}
         {ghost && <div class="row-ghost">{ghost}</div>}
@@ -159,10 +163,11 @@ export function ItemRow({ item, index = 0, showPerson = true, showKind = true, c
 
       {!ghost && !editing && (
         <span class="hover-only">
-          <SnoozeMenu onPick={snoozeRow} />
+          <SnoozeMenu item={item} onPick={snoozeRow} />
           <Dropdown label="More actions" face={<Icon name="ellipsis" size={14} />} items={[
             { label: 'Edit title', onClick: beginEdit },
             { label: 'Details', onClick: details },
+            ...nudge,
             { label: item.pinned ? 'Unpin' : 'Pin to top', onClick: () => { void togglePin(item); } },
             { label: 'Drop', danger: true, onClick: () => { void drop(item); } },
           ]} />
@@ -171,7 +176,10 @@ export function ItemRow({ item, index = 0, showPerson = true, showKind = true, c
 
       {showKind && <span class="c-kind"><KindLabel kind={item.kind} /></span>}
       {showPerson && (
-        <span class="c-person">{p && <><Avatar person={p} size={16} /><span class="ellipsis">{firstName(p.name)}</span></>}</span>
+        <span class="c-person">{p && (
+          <button type="button" class="person-hit" title={`Show only ${firstName(p.name)}`} aria-label={`Show only ${firstName(p.name)} on Today`}
+            onClick={(e) => { e.stopPropagation(); filterTodayBy(p.id); }}><Avatar person={p} size={16} /><span class="ellipsis">{firstName(p.name)}</span></button>
+        )}</span>
       )}
       <button type="button" ref={dueBtn} class={`c-date date-btn ${overdue ? 'overdue' : ''} ${dueText ? '' : 'empty'}`}
         title={dueTip ? `${dueTip} (click to change)` : 'Set a due date'}

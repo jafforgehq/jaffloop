@@ -6,7 +6,7 @@ Shipped for Apple Silicon only. Releases: only v0.1.0 (the Swift 0.0.x releases 
 
 ## Where we are
 
-Version 0.1.0: Jaffloop rebuilt on Electron (TypeScript, Preact, `node:sqlite`) with `electron-updater` auto update. It is the
+Version 0.2.0 (twenty small features on top of 0.1.0, see `docs/CHANGELOG.md` and `docs/FEATURES-0.2.md`): Jaffloop rebuilt on Electron (TypeScript, Preact, `node:sqlite`) with `electron-updater` auto update. It is the
 same product as the Swift 0.0.4 (same database, screens, shortcuts, MCP command). The Swift sources are in git history (tag `v0.0.4`).
 
 - Repo (public): https://github.com/jafforgehq/jaffloop
@@ -22,7 +22,7 @@ same product as the Swift 0.0.4 (same database, screens, shortcuts, MCP command)
 
 ## Verified
 
-- `npm run typecheck`, `npm test` (230 unit tests), `npm run test:e2e` (the built app driven by Playwright against a temp database: capture, keyboard, undo, edit, snooze, search, 1:1, people, appearance, hotkey, settings, MCP write detection, update flow against a local feed) all pass.
+- `npm run typecheck`, `npm test` (337 unit tests), `npm run test:e2e` (the built app driven by Playwright against a temp database: capture, keyboard, undo, edit, snooze, search, 1:1, people, appearance, hotkey, settings, MCP write detection, update flow against a local feed) all pass.
 - Screenshots in `docs/screenshots` are produced by `npm run screenshots` from the real app.
 
 ## Open items

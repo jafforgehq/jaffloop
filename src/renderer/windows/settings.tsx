@@ -1,14 +1,15 @@
 // Settings: General, Notifications, Claude (MCP), Data, About.
 import type { ComponentChildren } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { AccentChoice, AppearanceChoice, Density, SettingsTab, UiState } from '../../shared/api';
-import type { Item, Settings } from '../../shared/types';
+import type { CaptureTemplate, Item, Settings } from '../../shared/types';
 import { Icon } from '../components/icons';
 import { ItemRow } from '../components/item-row';
 import { GhostButton, IconButton, Segmented } from '../components/ui';
 import { UpdatePanel } from '../components/update-panel';
 import { Fmt } from '../core';
-import { api, info, saveSettings, savePerson, settings, snapshot, summaries, ui } from '../model';
+import { api, info, pauseNotifications, saveSettings, savePerson, settings, snapshot, summaries, ui } from '../model';
+import { normalizeJiraBase, pausedUntilLabel, savableTemplates, templateLines, toDraft, tomorrowAt9, validateTemplateName, type TemplateDraft } from '../speed-logic';
 import { HotkeyRecorder } from './hotkey-recorder';
 import { useReady } from './util';
 
@@ -109,22 +110,94 @@ function General() {
         </div>
         <Row label="Sounds"><Switch label="Sounds" on={s.sound} onChange={(v) => void saveSettings({ sound: v })} /></Row>
         {s.sound && <><SoundRow label="Save" k="soundSave" /><SoundRow label="Complete" k="soundComplete" /><SoundRow label="Undo" k="soundUndo" /></>}
+        <Row label="Menu bar shows">
+          <select class="input" style={{ width: 150 }} aria-label="Menu bar shows" value={u.trayText} onChange={(e) => void api.setUiState({ trayText: (e.target as HTMLSelectElement).value as UiState['trayText'] })}>
+            <option value="count">Overdue count</option><option value="next">Next item due</option>
+          </select>
+        </Row>
+        <Row label="Show anniversaries and birthdays" hint="A reminder under Check in on Today"><Switch label="Show anniversaries and birthdays" on={u.showDates} onChange={(v) => void api.setUiState({ showDates: v })} /></Row>
+        <JiraField />
         <Row label="End of day (eod)"><TimeField k="eodTime" label="End of day" /></Row>
         <Row label={`Stale wait: ${s.staleDaysAfterDue} days after due`}><Stepper label="stale wait days" value={s.staleDaysAfterDue} min={1} max={30} onChange={(v) => void saveSettings({ staleDaysAfterDue: v })} /></Row>
         <Row label={`Stale undated wait: ${s.staleDaysNoDue} days after creation`}><Stepper label="stale undated wait days" value={s.staleDaysNoDue} min={1} max={30} onChange={(v) => void saveSettings({ staleDaysNoDue: v })} /></Row>
+      </Group>
+      <Templates />
+    </>
+  );
+}
+
+function JiraField() {
+  const [v, setV] = useState(settings.value.jiraBaseUrl);
+  const bad = normalizeJiraBase(v) == null;
+  const commit = () => { const n = normalizeJiraBase(v); if (n != null && n !== settings.value.jiraBaseUrl) { setV(n); void saveSettings({ jiraBaseUrl: n }); } };
+  return (
+    <Row label="Jira base URL" hint={<>Keys like ABC-123 in titles become links to this address + the key. Leave empty for no key links. {bad && <span class="tpl-err">Start with https://</span>}</>}>
+      <input class="input wide" aria-label="Jira base URL" placeholder="https://yourcompany.atlassian.net/browse/" spellcheck={false} value={v}
+        onInput={(e) => setV((e.target as HTMLInputElement).value)} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+    </Row>
+  );
+}
+
+function Templates() {
+  const [drafts, setDrafts] = useState<TemplateDraft[]>(() => settings.value.captureTemplates.map(toDraft));
+  const save = (d: TemplateDraft[]) => { void saveSettings({ captureTemplates: savableTemplates(d, Fmt.isPrefix) as CaptureTemplate[] }); };
+  const latest = useRef(drafts);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const change = (next: TemplateDraft[]) => { latest.current = next; setDrafts(next); clearTimeout(timer.current); timer.current = setTimeout(() => save(next), 400); };
+  const flush = () => { clearTimeout(timer.current); save(latest.current); };
+  const edit = (i: number, patch: Partial<TemplateDraft>) => change(drafts.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  return (
+    <>
+      <Group title="Capture templates">
+        {drafts.map((d, i) => {
+          const err = validateTemplateName(d.name, drafts.filter((_, j) => j !== i).map((x) => x.name), Fmt.isPrefix) ?? (templateLines(d.text).length ? null : 'Add at least one line.');
+          return (
+            <div class="form-row stack" key={i}>
+              <div class="tpl-card">
+                <div class="row-flex gap8">
+                  <input class="input" style={{ width: 150 }} aria-label={`Template ${i + 1} name`} placeholder="prep" spellcheck={false} value={d.name}
+                    onInput={(e) => edit(i, { name: (e.target as HTMLInputElement).value.trim() })} onBlur={flush} />
+                  <span class="grow" />
+                  <GhostButton label={`Remove template ${d.name || i + 1}`} onClick={() => { const n = drafts.filter((_, j) => j !== i); latest.current = n; setDrafts(n); flush(); }}>Remove</GhostButton>
+                </div>
+                <textarea class="input" aria-label={`Template ${i + 1} lines`} rows={3} spellcheck={false} placeholder={'bring @{person} how are things going\nbring @{person} career goals'}
+                  value={d.text} onInput={(e) => edit(i, { text: (e.target as HTMLTextAreaElement).value })} onBlur={flush} />
+                {err && <div class="tpl-err">{err}</div>}
+              </div>
+            </div>
+          );
+        })}
+        <div class="form-row" style={{ justifyContent: 'flex-start' }}>
+          <GhostButton onClick={() => change([...drafts, { name: '', text: '' }])}>Add template</GhostButton>
+        </div>
+        <div class="form-row"><Note>One capture line per line. Use {'{person}'} for the @handle and {'{rest}'} for the text after it. Typing <span class="mono">prep @sara</span> in the capture bar creates every line of the <span class="mono">prep</span> template for Sara.</Note></div>
       </Group>
     </>
   );
 }
 
 function Notifications() {
+  const u = ui.value;
+  const [, tick] = useState(0);
+  useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t); }, []);
+  const now = Date.now();
+  const paused = u.pauseUntil != null && u.pauseUntil > now;
   return (
-    <Group>
+    <>
+    <Group title="Pause">
+      <Row label={paused ? <span data-testid="pause-status">Notifications are paused until {pausedUntilLabel(u.pauseUntil!, now, Fmt.short)}</span> : 'Notifications are on'}>
+        {paused && <GhostButton onClick={() => void pauseNotifications(null)}>Resume</GhostButton>}
+        <GhostButton onClick={() => void pauseNotifications(Date.now() + 3_600_000)}>Pause 1 hour</GhostButton>
+        <GhostButton onClick={() => void pauseNotifications(tomorrowAt9(Date.now()))}>Pause until tomorrow</GhostButton>
+      </Row>
+    </Group>
+    <Group title="Schedule">
       <Row label="Working hours start"><TimeField k="workStart" label="Working hours start" /></Row>
       <Row label="Working hours end"><TimeField k="workEnd" label="Working hours end" /></Row>
       <Row label="Morning brief (weekdays)"><TimeField k="morningBrief" label="Morning brief" /></Row>
       <div class="form-row"><Note>No notifications outside working hours or on weekends, except reminders you set explicitly. At most one notification every 10 minutes; items in the same window are batched.</Note></div>
     </Group>
+    </>
   );
 }
 

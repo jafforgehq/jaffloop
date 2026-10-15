@@ -9,6 +9,7 @@ import { Caret, Dropdown } from './dropdown';
 import { DueEditor } from './due-editor';
 import { SnoozeMenu } from './item-row';
 import { Icon } from './icons';
+import { TitleLinks } from './linked-title';
 import { Avatar, KindLabel, Popover, PrimaryButton, QuietButton } from './ui';
 
 function Field({ label, children }: { label: string; children: ComponentChildren }) {
@@ -85,6 +86,7 @@ export function ItemDrawer({ item }: { item: Item }) {
       <textarea ref={titleEl} class="drawer-title" rows={1} aria-label="Title" value={title}
         onInput={(e) => setTitle((e.target as HTMLTextAreaElement).value)} onBlur={commitTitle}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur(); } }} />
+      <TitleLinks text={title} />
       {item.quote && <div class="quote" style={{ fontSize: 13, marginTop: 8 }}>“{item.quote}”</div>}
 
       <textarea class="drawer-body" placeholder="Add details" aria-label="Details" value={bodyText}
@@ -130,7 +132,7 @@ export function ItemDrawer({ item }: { item: Item }) {
         {isOpen ? (
           <>
             <PrimaryButton onClick={() => { void complete(item); }}>Complete</PrimaryButton>
-            <SnoozeMenu className="btn quiet" label="Snooze" face={<Caret>Snooze</Caret>} onPick={(until) => { void snooze(item, until); }} />
+            <SnoozeMenu className="btn quiet" label="Snooze" face={<Caret>Snooze</Caret>} item={item} onPick={(until) => { void snooze(item, until); }} />
             <QuietButton onClick={() => { void togglePin(item); }}>{item.pinned ? 'Unpin' : 'Pin'}</QuietButton>
             <QuietButton onClick={() => { void drop(item); }}>Drop</QuietButton>
           </>

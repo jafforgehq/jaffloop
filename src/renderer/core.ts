@@ -31,3 +31,6 @@ export const PinOrder = P.PinOrder;
 export { NavHistory } from '../core/pure';
 export const sortPeople = (s: PersonSummary[], pinned: Set<string>): PersonSummary[] => P.PeopleOrder.sorted(s, pinned);
 export function parseCapture(line: string, opts?: { now?: number; eod?: [number, number] }): ParsedCapture { return P.parseCapture(line, opts); }
+
+// 0.2.0 features (pure logic from src/core, see docs/FEATURES-0.2.md for the exact signatures)
+export { linkify, expandTemplate, nextOneOnOneAt, reviewMarkdown, upcomingLabel } from '../core/pure';

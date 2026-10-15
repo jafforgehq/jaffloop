@@ -1,11 +1,13 @@
 // All reads and writes go through here, for both the app and the MCP server. Synchronous (node:sqlite).
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type {
-  AuditEntry, Interaction, InteractionKind, Item, ItemFilter, ItemKind, ItemSource, ItemStatus, ParsedCapture, Person,
-  PersonSummary, Relation, Settings, Snapshot, TodaySections, WeekSummary,
+  ActivityEntry, ActivityEvent, AuditEntry, CaptureTemplate, HeatRow, Interaction, InteractionKind, Item, ItemFilter, ItemKind, ItemSource,
+  ItemStatus, KeptRate, ParsedCapture, Person, PersonSummary, Relation, ReviewData, Settings, Snapshot, TodaySections, UpcomingDate, WeekSummary,
 } from '../shared/types';
-import { addDays, startOfDay } from './calendar';
+import { DAY_MS, addDays, dayDiff, startOfDay, startOfWeek } from './calendar';
 import { all, dateOrNull, dbDateOrNull, get, run, toDbDate, write, type Row } from './db';
+import { expandTemplate } from './features';
+import { CadenceStrip } from './helpers';
 import { nameFromHandle, newInteraction, newItem, newPerson } from './models';
 import { parseCapture } from './parser';
 import { nextFutureOccurrence } from './recurrence';
@@ -38,6 +40,7 @@ function personFromRow(r: Row): Person {
   return {
     id: str(r.id), handle: str(r.handle), name: str(r.name), relation: str(r.relation) as Relation, cadenceDays: intOrNull(r.cadence_days),
     matchEmails: str(r.match_emails), hiddenFromClaude: bool(r.hidden_from_claude), archived: bool(r.archived), notes: str(r.notes ?? ''),
+    startDate: strOrNull(r.start_date), birthday: strOrNull(r.birthday),
   };
 }
 
@@ -59,9 +62,22 @@ function itemParams(i: Item): SQLInputValue[] {
     toDbDate(i.updatedAt), dbDateOrNull(i.completedAt), toDbDate(i.lastTouchedAt)];
 }
 
-const PERSON_COLS = ['id', 'handle', 'name', 'relation', 'cadence_days', 'match_emails', 'hidden_from_claude', 'archived', 'notes'];
+const PERSON_COLS = ['id', 'handle', 'name', 'relation', 'cadence_days', 'match_emails', 'hidden_from_claude', 'archived', 'notes', 'start_date', 'birthday'];
 function personParams(p: Person): SQLInputValue[] {
-  return [p.id, p.handle, p.name, p.relation, p.cadenceDays, p.matchEmails, p.hiddenFromClaude ? 1 : 0, p.archived ? 1 : 0, p.notes];
+  return [p.id, p.handle, p.name, p.relation, p.cadenceDays, p.matchEmails, p.hiddenFromClaude ? 1 : 0, p.archived ? 1 : 0, p.notes, p.startDate, p.birthday];
+}
+
+/** Reads the JSON stored under `captureTemplates`; anything malformed becomes [] (or drops the bad entries). */
+function parseTemplates(raw: string | undefined): CaptureTemplate[] {
+  try {
+    const v: unknown = JSON.parse(raw ?? '[]');
+    if (!Array.isArray(v)) return [];
+    return v.flatMap((t: unknown) => {
+      const o = t as { name?: unknown; lines?: unknown };
+      if (typeof o?.name !== 'string' || !Array.isArray(o.lines)) return [];
+      return [{ name: o.name, lines: o.lines.filter((l): l is string => typeof l === 'string') }];
+    });
+  } catch { return []; }
 }
 
 const placeholders = (n: number): string => Array(n).fill('?').join(',');
@@ -93,9 +109,10 @@ export class Store {
         staleDaysNoDue: n('staleDaysNoDue', s.staleDaysNoDue), mcpReadOnly: d.get('mcpReadOnly') === '1', compact: d.get('compact') === '1',
         sound: d.get('sound') === '1', haptics: d.has('haptics') ? d.get('haptics') === '1' : true,
         hotkey: hotkeyToAccelerator(d.get('hotkey') ?? s.hotkey),
+        jiraBaseUrl: d.get('jiraBaseUrl') ?? s.jiraBaseUrl, captureTemplates: parseTemplates(d.get('captureTemplates')),
       };
     } catch {
-      return { ...DEFAULT_SETTINGS };
+      return { ...DEFAULT_SETTINGS, captureTemplates: [] };
     }
   }
 
@@ -105,6 +122,7 @@ export class Store {
       ['staleDaysAfterDue', String(s.staleDaysAfterDue)], ['staleDaysNoDue', String(s.staleDaysNoDue)],
       ['mcpReadOnly', s.mcpReadOnly ? '1' : '0'], ['compact', s.compact ? '1' : '0'], ['sound', s.sound ? '1' : '0'],
       ['haptics', s.haptics ? '1' : '0'], ['hotkey', s.hotkey],
+      ['jiraBaseUrl', s.jiraBaseUrl ?? ''], ['captureTemplates', JSON.stringify(s.captureTemplates ?? [])],
     ];
     write(this.db, () => {
       for (const [k, v] of pairs) run(this.db, 'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', k, v);
@@ -426,6 +444,135 @@ export class Store {
       .map(itemFromRow).filter((i) => i.snoozeCount >= 3 && i.status === 'open');
     const stale = all(this.db, "SELECT * FROM items WHERE kind = 'wait' AND status = 'open' ORDER BY rowid").map(itemFromRow).filter((i) => isStaleWait(i, now, s));
     return { created, completed, slipped, stale };
+  }
+
+  // ---- 0.2.0: review, kept promises, activity, heat grid, streak, dates ----
+
+  /** Completed promises (owe) with `completedAt` in [from, to), split into on time and late. */
+  private kept(from: number, to: number, periodDays: number): KeptRate {
+    const rows = all(this.db, "SELECT due_at, due_has_time, completed_at FROM items WHERE kind = 'owe' AND status = 'done' AND completed_at >= ? AND completed_at < ?",
+      toDbDate(from), toDbDate(to));
+    let onTime = 0;
+    for (const r of rows) {
+      const due = dateOrNull(r.due_at), done = dateOrNull(r.completed_at)!;
+      // a date-only due date is good until the end of that day
+      if (due === null || done < (bool(r.due_has_time) ? due + 1 : addDays(startOfDay(due), 1))) onTime++;
+    }
+    const total = rows.length;
+    return { periodDays, onTime, late: total - onTime, total, rate: total === 0 ? null : onTime / total };
+  }
+
+  /** Promises (owe) completed in the last `periodDays` days: how many were on time. */
+  keptRate(periodDays: number, now: number = Date.now()): KeptRate {
+    return this.kept(addDays(now, -periodDays), now + 1, periodDays);
+  }
+
+  /** What the weekly review screen shows for [from, to). Open-item lists are as of `to` (default now). */
+  review(from: number, to?: number, now: number = Date.now()): ReviewData {
+    const end = to ?? now;
+    const s = this.settings();
+    const f = toDbDate(from), t = toDbDate(end);
+    const open = this.items({ includeSnoozed: true }, end);
+    const inWindow = (where: string): Item[] => all(this.db, `SELECT * FROM items WHERE ${where} ORDER BY rowid`, f, t).map(itemFromRow);
+    const overBy = (x: PersonSummary): number => (x.daysSinceLast ?? 0) - (x.person.cadenceDays ?? 0);
+    return {
+      from, to: end,
+      slipped: open.filter(isSlipping),
+      staleWaits: open.filter((i) => isStaleWait(i, end, s)),
+      overduePromises: open.filter((i) => i.kind === 'owe' && isOverdue(i, end)),
+      offCadence: this.personSummaries(end).filter((x) => x.cadenceOverdue).sort((a, b) => overBy(b) - overBy(a)),
+      closed: all(this.db, 'SELECT * FROM items WHERE completed_at >= ? AND completed_at < ? ORDER BY completed_at, rowid', f, t).map(itemFromRow),
+      dropped: inWindow("status = 'dropped' AND updated_at >= ? AND updated_at < ?"),
+      created: inWindow('created_at >= ? AND created_at < ?'),
+      keptRate: this.kept(from, end, Math.max(1, Math.round((end - from) / DAY_MS))),
+    };
+  }
+
+  /** Item events since `from`, newest first, one entry per event, with the item as it is now. */
+  activity(from: number, limit = 100, now: number = Date.now()): ActivityEntry[] {
+    const known = new Set<string>(['created', 'completed', 'dropped', 'snoozed', 'reopened']);
+    return all(this.db, `SELECT e.at AS event_at, e.event AS event_name, i.* FROM item_events e JOIN items i ON i.id = e.item_id
+      WHERE e.at >= ? AND e.at <= ? ORDER BY e.at DESC, e.id DESC LIMIT ?`, toDbDate(from), toDbDate(now), limit)
+      .map((r) => ({ at: dateOrNull(r.event_at)!, event: (known.has(str(r.event_name)) ? str(r.event_name) : 'edited') as ActivityEvent, item: itemFromRow(r) }));
+  }
+
+  /** One row per active person (by name): was there an interaction in each of the last `weeks` weeks (oldest first)? */
+  heatGrid(weeks = 12, now: number = Date.now()): HeatRow[] {
+    const since = addDays(startOfWeek(now), -7 * (weeks - 1));
+    const dates = new Map<string, number[]>();
+    for (const r of all(this.db, 'SELECT person_id, occurred_at FROM interactions WHERE occurred_at >= ?', toDbDate(since))) {
+      const k = str(r.person_id);
+      (dates.get(k) ?? dates.set(k, []).get(k)!).push(dateOrNull(r.occurred_at)!);
+    }
+    return this.people().map((p) => ({ personId: p.id, weeks: CadenceStrip.weeks(dates.get(p.id) ?? [], now, weeks) }));
+  }
+
+  /**
+   * Weeks in a row (counting back from this one) in which the 1:1 cadence held: the gap since the previous interaction never
+   * exceeded `cadenceDays` during the week. A week before the first interaction fails. The current week adds one only when
+   * there was a 1:1 in it; while it is merely not over yet it adds nothing and does not break the run; once overdue it breaks it.
+   * 0 without a cadence.
+   */
+  onTimeStreak(personId: string, now: number = Date.now()): number {
+    const cadence = this.personById(personId)?.cadenceDays ?? null;
+    if (cadence === null) return 0;
+    const dates = all(this.db, 'SELECT occurred_at FROM interactions WHERE person_id = ? ORDER BY occurred_at', personId)
+      .map((r) => dateOrNull(r.occurred_at)!).filter((d) => d <= now);
+    if (dates.length === 0) return 0;
+    const held = (weekStart: number): { ok: boolean; met: boolean } => {
+      const end = addDays(weekStart, 7);
+      let prev: number | undefined = [...dates].reverse().find((d) => d < weekStart);
+      const inWeek = dates.filter((d) => d >= weekStart && d < end);
+      for (const m of inWeek) {
+        if (prev !== undefined && dayDiff(prev, m) > cadence) return { ok: false, met: true };
+        prev = m;
+      }
+      if (prev === undefined) return { ok: false, met: false };
+      return { ok: dayDiff(prev, Math.min(end - 1, now)) <= cadence, met: inWeek.length > 0 };
+    };
+    let week = startOfWeek(now);
+    let n = 0;
+    const cur = held(week);
+    if (!cur.ok) return 0;
+    if (cur.met) n++;
+    // weeks before the first interaction fail, so this ends
+    for (week = addDays(week, -7); held(week).ok; week = addDays(week, -7)) n++;
+    return n;
+  }
+
+  /** Work anniversaries (at least one year) and birthdays of active people within `withinDays`, soonest first. */
+  upcomingDates(withinDays = 14, now: number = Date.now()): UpcomingDate[] {
+    const today = startOfDay(now);
+    const year = new Date(today).getFullYear();
+    // the next day on or after today with this month and day; Feb 29 is Feb 28 in years without one
+    const next = (month: number, dayOfMonth: number): { on: number; year: number } | null => {
+      if (new Date(2000, month - 1, dayOfMonth).getMonth() !== month - 1) return null; // not a real calendar day (2000 is a leap year)
+      for (let y = year; ; y++) {
+        const on = new Date(y, month - 1, dayOfMonth).getMonth() === month - 1 ? new Date(y, month - 1, dayOfMonth).getTime() : new Date(y, month - 1, dayOfMonth - 1).getTime();
+        if (on >= today) return { on, year: y };
+      }
+    };
+    const out: UpcomingDate[] = [];
+    for (const p of this.people()) {
+      const start = p.startDate === null ? null : /^(\d{4})-(\d{2})-(\d{2})$/.exec(p.startDate);
+      if (start) {
+        const o = next(+start[2]!, +start[3]!), years = o ? o.year - +start[1]! : 0;
+        if (o && years >= 1 && dayDiff(today, o.on) <= withinDays) out.push({ personId: p.id, kind: 'anniversary', on: o.on, inDays: dayDiff(today, o.on), years });
+      }
+      const bday = p.birthday === null ? null : /(\d{2})-(\d{2})$/.exec(p.birthday);
+      if (bday) {
+        const o = next(+bday[1]!, +bday[2]!);
+        if (o && dayDiff(today, o.on) <= withinDays) out.push({ personId: p.id, kind: 'birthday', on: o.on, inDays: dayDiff(today, o.on), years: null });
+      }
+    }
+    return out.sort((a, b) => a.on - b.on);
+  }
+
+  /** Like `capture`, but a line that starts with a capture-template name and has an @person creates every line of the template. */
+  captureMany(line: string, now: number = Date.now(), source: ItemSource = 'hotkey'): Item[] {
+    const lines = expandTemplate(line, this.settings().captureTemplates);
+    if (lines === null || lines.length === 0) return [this.capture(line, source, now)];
+    return write(this.db, () => lines.map((l) => this.capture(l, source, now)));
   }
 
   // ---- audit log (MCP) ----

@@ -47,12 +47,15 @@ export interface NewPerson {
   hiddenFromClaude?: boolean;
   archived?: boolean;
   notes?: string;
+  startDate?: string | null;
+  birthday?: string | null;
 }
 
 export function newPerson(p: NewPerson): Person {
   return {
     id: p.id ?? newId(), handle: p.handle, name: p.name, relation: p.relation ?? 'other', cadenceDays: p.cadenceDays ?? null,
     matchEmails: p.matchEmails ?? '', hiddenFromClaude: p.hiddenFromClaude ?? false, archived: p.archived ?? false, notes: p.notes ?? '',
+    startDate: p.startDate ?? null, birthday: p.birthday ?? null,
   };
 }
 

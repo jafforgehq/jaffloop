@@ -57,6 +57,11 @@ export function createHandlers(c: IpcCtx): Handlers {
       c.flyDot(win(e));
       return item;
     },
+    captureMany: (e, line) => {
+      const items = write(() => c.store.captureMany(line, now()));
+      c.flyDot(win(e));
+      return items;
+    },
     parse: (_e, line) => parseCapture(line, { now: now(), eod: hm(c.store.settings().eodTime) }),
     update: (_e, id, patch) => write(() => c.store.update(id, patch, now())),
     restore: (_e, item) => write(() => c.store.restore(item)),
@@ -77,6 +82,14 @@ export function createHandlers(c: IpcCtx): Handlers {
       });
     },
     logInteraction: (_e, personId, kind, notes): Interaction => write(() => c.store.logInteraction(personId, kind ?? '1on1', notes ?? null, now())),
+
+    review: (_e, from, to) => c.store.review(from, to, now()),
+    keptRate: (_e, days) => c.store.keptRate(days, now()),
+    activity: (_e, from, limit) => c.store.activity(from, limit, now()),
+    heatGrid: (_e, weeks) => c.store.heatGrid(weeks, now()),
+    onTimeStreak: (_e, personId) => c.store.onTimeStreak(personId, now()),
+    upcomingDates: (_e, days) => c.store.upcomingDates(days, now()),
+    pauseNotifications: (_e, until) => { c.ui.set({ pauseUntil: typeof until === 'number' && until > now() ? until : null }); },
 
     // ---- interface state
     uiState: () => c.ui.get(),
@@ -106,7 +119,7 @@ export function createHandlers(c: IpcCtx): Handlers {
       const w = win(e);
       const text = line.trim();
       if (text) {
-        write(() => c.store.capture(text, 'hotkey', now()));
+        write(() => c.store.captureMany(text, now()));
         const s = c.store.settings();
         const sound = c.ui.get().soundSave;
         if (s.sound && sound !== 'None') playSound(sound);

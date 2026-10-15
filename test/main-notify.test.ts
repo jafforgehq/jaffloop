@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { newItem } from '../src/core/pure';
 import { DEFAULT_SETTINGS } from '../src/core/pure';
-import { isQuiet, nextWorkStart, planNotifications } from '../src/main/notify-plan';
+import { isQuiet, nextWorkStart, planNotifications, tomorrowNine } from '../src/main/notify-plan';
 
 // TZ=UTC (vitest.config). Wed 2026-10-14 10:00 local
 const at = (d: string, h = 0, m = 0) => new Date(`${d}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`).getTime();
 const NOW = at('2026-10-14', 10, 0);
 const people = new Map([['p1', 'Sara Lindqvist']]);
-const plan = (items = [] as ReturnType<typeof newItem>[], o: { now?: number; notified?: string[]; s?: Partial<typeof DEFAULT_SETTINGS> } = {}) =>
-  planNotifications({ items, people, settings: { ...DEFAULT_SETTINGS, ...o.s }, now: o.now ?? NOW, notified: new Set(o.notified ?? []) });
+const plan = (items = [] as ReturnType<typeof newItem>[], o: { now?: number; notified?: string[]; s?: Partial<typeof DEFAULT_SETTINGS>; pausedUntil?: number | null } = {}) =>
+  planNotifications({ items, people, settings: { ...DEFAULT_SETTINGS, ...o.s }, now: o.now ?? NOW, notified: new Set(o.notified ?? []), pausedUntil: o.pausedUntil });
 
 describe('quiet hours', () => {
   it('weekends and outside work hours are quiet', () => {
@@ -107,5 +107,30 @@ describe('stale waiting-on', () => {
   it('says Someone when the person is unknown', () => {
     const i = { ...stale(), personId: null };
     expect(plan([i]).find((x) => x.kind === 'stale')!.title).toBe("Someone hasn't sent API spec");
+  });
+});
+
+describe('pause', () => {
+  const items = () => [
+    newItem({ kind: 'task', title: 'soon', remindAt: at('2026-10-14', 10, 30), now: NOW }),
+    newItem({ kind: 'task', title: 'later', remindAt: at('2026-10-14', 15), now: NOW }),
+  ];
+  it('drops everything planned before the end of the pause, keeps the rest', () => {
+    const p = plan(items(), { pausedUntil: at('2026-10-14', 11) });
+    expect(p.filter((x) => x.kind === 'reminder').map((x) => x.title)).toEqual(['later']);
+    expect(p.every((x) => x.at >= at('2026-10-14', 11))).toBe(true);
+  });
+  it('a pause until tomorrow morning also holds back the 16:30 and stale notices of today', () => {
+    expect(plan(items(), { pausedUntil: tomorrowNine(NOW) }).every((x) => x.at >= at('2026-10-15', 9))).toBe(true);
+  });
+  it('an expired or missing pause changes nothing', () => {
+    const its = items();
+    const all = plan(its);
+    expect(plan(its, { pausedUntil: NOW - 1 })).toEqual(all);
+    expect(plan(its, { pausedUntil: null })).toEqual(all);
+  });
+  it('tomorrowNine is 09:00 the next day', () => {
+    expect(tomorrowNine(at('2026-10-14', 23, 59))).toBe(at('2026-10-15', 9));
+    expect(tomorrowNine(at('2026-10-14', 1))).toBe(at('2026-10-15', 9));
   });
 });

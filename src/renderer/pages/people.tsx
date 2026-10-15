@@ -1,16 +1,62 @@
 import { useState } from 'preact/hooks';
-import type { PersonSummary } from '../../shared/types';
+import type { HeatRow, PersonSummary } from '../../shared/types';
 import { AllClosed } from '../components/all-closed';
 import { Icon } from '../components/icons';
 import { Page } from '../components/page';
 import { CadenceRing, Chip, Dot, GhostButton, Segmented } from '../components/ui';
-import { addPerson, api, go, orderedPeople, summaries, ui } from '../model';
+import { Fmt } from '../core';
+import { useFetched } from '../hooks/use-fetched';
+import { addPerson, api, go, orderedPeople, person, summaries, ui } from '../model';
 import { lastOneOnOne, sortPeopleBy } from '../people-logic';
+import { heatWeekStarts, loadShares } from '../reports-logic';
+
+const HEAT_WEEKS = 12;
+
+/** Who you met with, week by week: one row per person, twelve squares, oldest to newest. The current week is outlined. */
+function RhythmPanel() {
+  const rows = useFetched(() => api.heatGrid(HEAT_WEEKS), []);
+  if (!rows || rows.length === 0) return null;
+  const starts = heatWeekStarts(Date.now(), HEAT_WEEKS);
+  const weekText = (ms: number) => `Week of ${Fmt.short(ms, 'd MMM')}`;
+  return (
+    <section class="rhythm card" aria-label="Rhythm" data-testid="rhythm">
+      <div class="rhythm-head"><span class="caps">Rhythm</span><span class="dim" style={{ fontSize: 11.5 }}>1:1s per week, last {HEAT_WEEKS} weeks</span></div>
+      {rows.map((r: HeatRow) => {
+        const p = person(r.personId);
+        if (!p) return null;
+        const met = r.weeks.filter(Boolean).length;
+        return (
+          <div key={r.personId} class="heat-row" data-testid="heat-row">
+            <button type="button" class="heat-name ellipsis" onClick={() => go(`person:${r.personId}`)} title={`Open ${p.name}`}>{p.name}</button>
+            <span class="heat-cells" role="img" aria-label={`${p.name}: 1:1 in ${met} of the last ${r.weeks.length} weeks`}>
+              {r.weeks.map((on, i) => (
+                <span key={i} class={`heat-cell ${on ? 'on' : ''} ${i === r.weeks.length - 1 ? 'now' : ''}`}
+                  title={`${weekText(starts[i] ?? 0)}${on ? ': 1:1' : ': none'}`} />
+              ))}
+            </span>
+            <span class="mono dim heat-count">{met}/{r.weeks.length}</span>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+/** Open owes (accent) and waits (blue) as one thin bar, scaled by the busiest person. */
+function LoadBar({ share, owe, wait }: { share?: { owe: number; wait: number }; owe: number; wait: number }) {
+  return (
+    <span class="loadbar" role="img" aria-label={`${owe} owed, ${wait} waiting`}>
+      <span class="loadbar-owe" style={{ width: `${share?.owe ?? 0}%` }} />
+      <span class="loadbar-wait" style={{ width: `${share?.wait ?? 0}%` }} />
+    </span>
+  );
+}
 
 export function PeoplePage() {
   const [name, setName] = useState('');
   const { peopleLayout: layout, peopleSort: sort, pinnedPeople } = ui.value;
   const people = sortPeopleBy(sort, summaries.value, orderedPeople.value);
+  const load = loadShares(summaries.value);
 
   const add = async () => {
     const n = name.trim();
@@ -39,15 +85,16 @@ export function PeoplePage() {
           { value: 'grid', aria: 'Grid', label: <Icon name="grid" size={14} /> },
         ]} />
       </div>
+      <RhythmPanel />
       {summaries.value.length === 0 && <AllClosed title="No one yet" message="Add the people you meet with. Typing @name in a capture adds them too." />}
       {layout === 'grid'
-        ? <div class="people-grid">{people.map((s) => <Card key={s.person.id} s={s} pinned={pinnedPeople.includes(s.person.id)} />)}</div>
-        : <div class="people-list">{people.map((s) => <Row key={s.person.id} s={s} />)}</div>}
+        ? <div class="people-grid">{people.map((s) => <Card key={s.person.id} s={s} pinned={pinnedPeople.includes(s.person.id)} share={load.get(s.person.id)} />)}</div>
+        : <div class="people-list">{people.map((s) => <Row key={s.person.id} s={s} share={load.get(s.person.id)} />)}</div>}
     </Page>
   );
 }
 
-function Row({ s }: { s: PersonSummary }) {
+function Row({ s, share }: { s: PersonSummary; share?: { owe: number; wait: number } }) {
   return (
     <button type="button" class="prow" onClick={() => go(`person:${s.person.id}`)}>
       <CadenceRing person={s.person} daysSince={s.daysSinceLast} overdue={s.cadenceOverdue} size={40} />
@@ -56,12 +103,15 @@ function Row({ s }: { s: PersonSummary }) {
         <span class="mono dim" style={{ display: 'block' }}>{s.person.relation}</span>
       </span>
       <span class={s.cadenceOverdue ? 'clay' : 'dim'} style={{ fontSize: 12 }}>{lastOneOnOne(s.daysSinceLast)}</span>
-      <span class="mono dim" style={{ width: 100, textAlign: 'right' }}>{s.openOwe} owe · {s.openWait} wait</span>
+      <span class="load-cell">
+        <LoadBar share={share} owe={s.openOwe} wait={s.openWait} />
+        <span class="mono dim"><span class="load-owe">{s.openOwe}</span> owe · <span class="load-wait">{s.openWait}</span> wait</span>
+      </span>
     </button>
   );
 }
 
-function Card({ s, pinned }: { s: PersonSummary; pinned: boolean }) {
+function Card({ s, pinned, share }: { s: PersonSummary; pinned: boolean; share?: { owe: number; wait: number } }) {
   return (
     <button type="button" class="pcard card" onClick={() => go(`person:${s.person.id}`)}>
       <span class="row-flex gap10" style={{ width: '100%' }}>
@@ -73,6 +123,7 @@ function Card({ s, pinned }: { s: PersonSummary; pinned: boolean }) {
         {pinned && <span class="dim"><Icon name="pin" size={11} /></span>}
       </span>
       <span class={s.cadenceOverdue ? 'clay' : 'dim'} style={{ fontSize: 12 }}>{lastOneOnOne(s.daysSinceLast, true)}</span>
+      <LoadBar share={share} owe={s.openOwe} wait={s.openWait} />
       <span class="row-flex gap6">
         <Chip><Dot kind="owe" />{s.openOwe} owe</Chip>
         <Chip><Dot kind="wait" />{s.openWait} wait</Chip>

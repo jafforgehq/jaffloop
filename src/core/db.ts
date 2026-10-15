@@ -32,7 +32,7 @@ export function fromDbDate(v: unknown): number {
 export const dateOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : fromDbDate(v));
 export const dbDateOrNull = (ms: number | null | undefined): string | null => (ms === null || ms === undefined ? null : toDbDate(ms));
 
-// ---- schema (copied from a database made by the Swift build; GRDB migrations "v1" and "v2-person-notes") ----
+// ---- schema (copied from a database made by the Swift build; GRDB migrations "v1" and "v2-person-notes", then our "v3-person-dates") ----
 
 const V1 = `
 CREATE TABLE "people" ("id" TEXT PRIMARY KEY NOT NULL, "handle" TEXT NOT NULL UNIQUE, "name" TEXT NOT NULL, "relation" TEXT NOT NULL DEFAULT 'other', "cadence_days" INTEGER, "match_emails" TEXT NOT NULL DEFAULT '', "hidden_from_claude" BOOLEAN NOT NULL DEFAULT 0, "archived" BOOLEAN NOT NULL DEFAULT 0);
@@ -57,11 +57,15 @@ CREATE TRIGGER "__items_fts_au" AFTER UPDATE ON "items" BEGIN
 END;
 `;
 const V2 = `ALTER TABLE "people" ADD COLUMN "notes" TEXT NOT NULL DEFAULT ''`;
+// 0.2.0 (not a GRDB migration: the Swift build predates it). Both columns are private and never exposed over MCP.
+const V3 = `ALTER TABLE "people" ADD COLUMN "start_date" TEXT;
+ALTER TABLE "people" ADD COLUMN "birthday" TEXT;`;
 
 /** In GRDB's order. Exported so tests can build a v1 database. */
 export const MIGRATIONS: ReadonlyArray<{ id: string; sql: string }> = [
   { id: 'v1', sql: V1 },
   { id: 'v2-person-notes', sql: V2 },
+  { id: 'v3-person-dates', sql: V3 },
 ];
 
 /** Runs `fn` in a write transaction (BEGIN IMMEDIATE, like GRDB); joins an open one. */
