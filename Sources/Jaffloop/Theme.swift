@@ -32,6 +32,8 @@ enum Theme {
     })
     static let clay = Color(dark: 0xEA6E53, light: 0xB5401F)
     static let avatar = Color(dark: 0x2B2A28, light: 0xE7E4DC)
+    /// User-chosen accent (Settings): focus ring, selection, links. Set by AppModel.
+    static var accent = Color(dark: 0x96938C, light: 0x6B6860)
 
     static func kind(_ k: ItemKind) -> Color {
         switch k {
@@ -55,7 +57,7 @@ enum Theme {
 enum Col {
     static let kind: CGFloat = 58
     static let person: CGFloat = 78
-    static let date: CGFloat = 84
+    static let date: CGFloat = 112
 }
 
 enum Motion {
@@ -79,19 +81,27 @@ enum Fmt {
         case let n where n < -1 && n > -7: f.dateFormat = "EEE"; day = f.string(from: d)
         default: f.dateFormat = "MMM d"; day = f.string(from: d)
         }
-        if i.dueHasTime { f.dateFormat = "HH:mm"; day += " " + f.string(from: d) }
+        if i.dueHasTime { f.dateFormat = TimeFormat.localize("HH:mm"); day += " " + f.string(from: d) }
         return day
     }
 
     static func short(_ d: Date, _ fmt: String) -> String {
-        let f = DateFormatter(); f.dateFormat = fmt; return f.string(from: d)
+        let f = DateFormatter(); f.dateFormat = TimeFormat.localize(fmt); return f.string(from: d)
+    }
+
+    /// Full date for tooltips: "Friday 16 October 2026" plus the time when there is one.
+    static func exact(_ i: Item) -> String? {
+        guard let d = i.dueAt else { return nil }
+        let f = DateFormatter(); f.dateFormat = TimeFormat.localize(i.dueHasTime ? "EEEE d MMMM yyyy, HH:mm" : "EEEE d MMMM yyyy")
+        return f.string(from: d)
     }
 
     static func backLabel(_ d: Date, now: Date = Date(), cal: Calendar = .current) -> String {
         let f = DateFormatter(); f.calendar = cal
-        if cal.isDate(d, inSameDayAs: now) { f.dateFormat = "HH:mm"; return "back " + f.string(from: d) }
+        f.dateFormat = TimeFormat.localize("HH:mm")
+        if cal.isDate(d, inSameDayAs: now) { return "back " + f.string(from: d) }
         let days = cal.dateComponents([.day], from: cal.startOfDay(for: now), to: cal.startOfDay(for: d)).day ?? 0
-        if days == 1 { f.dateFormat = "HH:mm"; return "back tomorrow \(f.string(from: d))" }
+        if days == 1 { return "back tomorrow \(f.string(from: d))" }
         f.dateFormat = "EEE"; return "back " + f.string(from: d)
     }
 }

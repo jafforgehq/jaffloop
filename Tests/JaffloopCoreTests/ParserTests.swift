@@ -227,3 +227,55 @@ final class MCPTests: XCTestCase {
         XCTAssertNil(server.handle(["jsonrpc": "2.0", "method": "notifications/initialized"]))
     }
 }
+
+
+final class HelperTests: XCTestCase {
+    var cal: Calendar = { var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; c.firstWeekday = 2; return c }()
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func testVersionCompare() {
+        XCTAssertTrue(AppVersion("0.0.3")! > AppVersion("0.0.2")!)
+        XCTAssertTrue(AppVersion("v0.1")! > AppVersion("0.0.9")!)
+        XCTAssertEqual(AppVersion("1.0")!, AppVersion("1.0.0")!)
+        XCTAssertNil(AppVersion("dev"))
+        XCTAssertEqual(AppVersion("v0.0.3")!.description, "0.0.3")
+    }
+    func testLocalizedClock() {
+        XCTAssertTrue(TimeFormat.localize("HH:mm", locale: Locale(identifier: "en_US")).contains("a"))
+        XCTAssertTrue(TimeFormat.localize("HH:mm", locale: Locale(identifier: "en_GB")).contains("HH"))
+        XCTAssertEqual(TimeFormat.localize("EEE", locale: Locale(identifier: "en_US")), "EEE", "no time part, unchanged")
+    }
+    func summary(_ name: String, cadence: Int?, days: Int?, overdue: Bool) -> PersonSummary {
+        PersonSummary(person: Person(handle: name.lowercased(), name: name, cadenceDays: cadence), lastInteraction: nil,
+                      openOwe: 0, openWait: 0, daysSinceLast: days, cadenceOverdue: overdue)
+    }
+    func testPeopleOrder() {
+        let a = summary("Amir", cadence: 7, days: 3, overdue: false)
+        let b = summary("Bea", cadence: 14, days: 23, overdue: true)     // 9 days late
+        let c = summary("Cy", cadence: 7, days: 30, overdue: true)       // 23 days late
+        let d = summary("Dee", cadence: nil, days: nil, overdue: false)
+        let order = PeopleOrder.sorted([a, b, c, d], pinned: [d.person.id]).map { $0.person.name }
+        XCTAssertEqual(order, ["Dee", "Cy", "Bea", "Amir"])
+    }
+    func testCadenceStrip() {
+        let w = CadenceStrip.weeks([now.addingTimeInterval(-1 * 86400), now.addingTimeInterval(-15 * 86400)], now: now, count: 4, calendar: cal)
+        XCTAssertEqual(w.count, 4)
+        XCTAssertTrue(w.contains(true))
+        XCTAssertEqual(CadenceStrip.weeks([], now: now, count: 3, calendar: cal), [false, false, false])
+    }
+    func testAgeBadge() {
+        let old = Item(kind: .wait, title: "x", now: now.addingTimeInterval(-12 * 86400))
+        XCTAssertEqual(ItemAge.badge(old, now: now, calendar: cal), 12)
+        XCTAssertNil(ItemAge.badge(Item(kind: .wait, title: "x", now: now.addingTimeInterval(-86400)), now: now, calendar: cal))
+        XCTAssertNil(ItemAge.badge(Item(kind: .task, title: "x", now: now.addingTimeInterval(-12 * 86400)), now: now, calendar: cal))
+    }
+    func testRestoreUndoesDropAndSnooze() throws {
+        let store = Store(try openInMemoryDatabase())
+        let i = try store.capture("owe @sara x fri")
+        let before = try store.item(i.id)!
+        try store.drop(i.id); XCTAssertEqual(try store.item(i.id)!.status, .dropped)
+        try store.restore(before); XCTAssertEqual(try store.item(i.id)!.status, .open)
+        try store.snooze(i.id, until: Date().addingTimeInterval(3600)); XCTAssertEqual(try store.item(i.id)!.snoozeCount, 1)
+        try store.restore(before); XCTAssertEqual(try store.item(i.id)!.snoozeCount, 0)
+    }
+}

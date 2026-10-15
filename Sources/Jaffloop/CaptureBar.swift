@@ -10,7 +10,7 @@ final class CapturePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     convenience init(model: AppModel, onClose: @escaping () -> Void) {
-        self.init(contentRect: NSRect(x: 0, y: 0, width: 640, height: 300),
+        self.init(contentRect: NSRect(x: 0, y: 0, width: 640, height: 380),
                   styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
                   backing: .buffered, defer: false)
         isFloatingPanel = true
@@ -63,7 +63,7 @@ struct CaptureView: View {
 
     private var suggestions: [Person] {
         guard let q = atQuery else { return [] }
-        let all = model.summaries.map { $0.person }
+        let all = model.recentPeople
         return Array((q.isEmpty ? all : all.filter { $0.handle.hasPrefix(q) || $0.name.lowercased().hasPrefix(q) || $0.name.lowercased().contains(" " + q) }).prefix(4))
     }
 
@@ -89,6 +89,8 @@ struct CaptureView: View {
                     Rectangle().fill(Theme.hairline).frame(height: 0.5)
                     chips.padding(.horizontal, 18).padding(.vertical, 10)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    Rectangle().fill(Theme.hairline).frame(height: 0.5)
+                    preview
                     if !suggestions.isEmpty || (atQuery != nil && !(atQuery ?? "").isEmpty) { suggestionList }
                 } else {
                     Rectangle().fill(Theme.hairline).frame(height: 0.5)
@@ -165,9 +167,31 @@ struct CaptureView: View {
         .animation(.spring(response: 0.2, dampingFraction: 0.75), value: p.tokens.map { $0.text })
     }
 
+    /// What the saved row will look like, in the same columns as the lists.
+    @ViewBuilder var preview: some View {
+        let p = parsed
+        let person = p.personHandle.flatMap { h in model.summaries.first { $0.person.handle == h }?.person }
+        let item = Item(kind: p.kind, title: p.title.isEmpty ? "Untitled" : p.title, quote: p.quote, personId: person?.id,
+                        dueAt: p.dueAt, dueHasTime: p.dueHasTime, pinned: p.pinned, inbox: p.inbox)
+        HStack(spacing: 10) {
+            LoopRing(size: 14, lineWidth: 1.4).opacity(0.7)
+            Text(item.title).font(Theme.row).foregroundStyle(Theme.text).lineLimit(1)
+            Spacer(minLength: 8)
+            if p.pinned { Image(systemName: "pin.fill").font(.system(size: 9)).foregroundStyle(Theme.text2) }
+            KindLabel(kind: p.kind).frame(width: Col.kind, alignment: .leading)
+            HStack(spacing: 5) {
+                if let person { Avatar(person: person, size: 16); Text(person.name.split(separator: " ").first.map(String.init) ?? person.name).font(.system(size: 11.5)).foregroundStyle(Theme.text2).lineLimit(1) }
+            }.frame(width: Col.person, alignment: .leading)
+            Text(Fmt.due(item) ?? (p.inbox ? "Inbox" : "")).font(Theme.date).foregroundStyle(Theme.text2).frame(width: Col.date, alignment: .trailing)
+        }
+        .padding(.horizontal, 18).padding(.vertical, 9)
+        .accessibilityElement(children: .combine).accessibilityLabel("Preview: \(item.title), \(p.kind.rawValue)")
+    }
+
     var suggestionList: some View {
         VStack(alignment: .leading, spacing: 0) {
             Rectangle().fill(Theme.hairline).frame(height: 0.5)
+            if (atQuery ?? "").isEmpty { Text("RECENT").font(Theme.caps).tracking(0.8).foregroundStyle(Theme.text2).padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 2) }
             ForEach(Array(suggestions.enumerated()), id: \.element.id) { idx, p in
                 HStack(spacing: 8) {
                     Avatar(person: p, size: 20); Text(p.name).font(.system(size: 13)); Text("@\(p.handle)").font(Theme.mono).foregroundStyle(Theme.text2)

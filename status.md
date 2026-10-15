@@ -4,25 +4,22 @@ Last updated: 2026-10-14
 
 ## Where we are
 
-Version 0.0.2 is built, tested, signed, notarized (Apple status Accepted, ticket stapled), and published. It is a UI-only release: no new features.
+Version 0.0.3 is built, tested (39 tests), signed, notarized, and published. It is a UI release plus an in-app update check and What's new page.
 
 - Repo (public): https://github.com/jafforgehq/jaffloop
-- Release: https://github.com/jafforgehq/jaffloop/releases/tag/v0.0.2
-- Release assets: `Jaffloop-0.0.2.zip` and `Jaffloop-0.0.2.zip.sha256`
-- v0.0.1 was signed but not notarized. It stays published for history.
+- Release: https://github.com/jafforgehq/jaffloop/releases/tag/v0.0.3
+- Release assets: `Jaffloop-0.0.3.zip` and `Jaffloop-0.0.3.zip.sha256`
+- Older releases (0.0.1, 0.0.2) stay published.
 
-## What changed in 0.0.2 (UI only)
+## What changed in 0.0.3
 
-- Rows use fixed kind, person and date columns, so they line up on every screen.
-- Today shows "N open · M need you today" above the kind strip; the sidebar badge has a tooltip.
-- Empty sections on a person page collapse to one dim line. Content is capped at 880 pt and centred.
-- Larger small type (11.5 pt for section headers, kind labels and key hints). Light-mode colours darkened to pass 4.5:1 contrast.
-- Quiet Schedule and Dismiss buttons on check-ins. "Log 1:1" is the primary action on a person page; Edit moved to a menu.
-- Capture bar shows key hints (save, save and keep open, cancel, repeat last) and a syntax line.
-- Visible keyboard-focus ring, tooltips, and VoiceOver labels on rows, buttons and sidebar items.
-- Free hotkey recorder in Settings (needs ⌃, ⌥ or ⌘, or an F-key), with a "shortcut taken" message and Reset.
-- The save animation is now a dot that flies from the capture card to the menu bar icon, then blips. Reduce Motion falls back to the blip.
-- Screenshot generator keeps "today" times in the future and hides the hover highlight; the MCP settings shot no longer shows a dev path.
+See `docs/CHANGELOG.md`. In short: keyboard selection, undo toast, details drawer, inline edit, multi-select, drag to assign, Today grouping/collapse/focus, age badges, locale clock, 12-week 1:1 strip, pinned people, capture preview, menu bar count and quick add, appearance/accent/density settings, calendar removed.
+
+## Updates and release notes
+
+- Settings, About, and the What's new page have a **Check for updates** button. It calls the GitHub releases API once, only when pressed (or daily if the user opts in). It never downloads or installs; it links to the zip and release page.
+- First launch of a newer version opens What's new with a banner. Version tracking started in 0.0.3, so an existing install with data is treated as updated from "an earlier version".
+- Release notes and roadmap live in `Sources/Jaffloop/Releases.swift` (in app) and `docs/CHANGELOG.md`, `docs/ROADMAP.md`. Release checklist is at the bottom of `docs/ROADMAP.md`.
 
 ## What is built
 
@@ -44,18 +41,18 @@ Packaging and docs: `scripts/build-app.sh`, `scripts/Info.plist`, `scripts/Jaffl
 
 ## Open items
 
-1. **No LICENSE file.** The spec says the app stays paid and only the MCP server and data format might be open. Until a license is added, all rights are reserved. Decision needed from the owner.
+1. **No LICENSE file.** The spec says the app stays paid and only the MCP server and data format might be open. Decision needed from the owner.
 
 ## Known gaps and shortcuts
 
 - The database is not encrypted (relies on FileVault).
-- Builds are arm64 only. The x86_64 universal build failed because the SDK deprecates it.
+- Builds are arm64 only.
 - Notifications only work from the bundled `.app`.
-- Not exercised by hand: the global hotkey and the new recorder, the flying-dot animation, the keyboard focus ring (it depends on the system's keyboard navigation setting), VoiceOver, capture panel key handling (including ⌘Enter), calendar permission and the pre-meeting flow, notification actions, and the live app refresh when the MCP server writes. The UI was verified through rendered screenshots, `swift test` (33 tests) and a launch smoke test only.
-- The hotkey key table has no unit test because it lives in the executable target.
+- Not exercised by hand (only screenshots, 39 unit tests and a launch smoke test): every keyboard shortcut, drag-to-assign, the bulk bar, the undo toast and ⌘Z, inline edit, the flying dot, the hotkey recorder, appearance switching, the menu bar count, the update check against a newer release, the What's new auto-open after an update, VoiceOver, and the focus ring.
+- Update check was verified only against the GitHub API shape (curl), not through the app.
 
 ## Next steps
 
-1. Hands-on test of the hotkey recorder, flying dot, focus ring, VoiceOver, capture panel, calendar, and notification flows.
-2. Choose and add a license.
-3. Decide whether to build a universal binary or keep arm64 only.
+1. Use 0.0.3 for a few days and fix what breaks (see the "not exercised by hand" list).
+2. Monday and Friday reviews over MCP (see `docs/ROADMAP.md`).
+3. Choose and add a license.

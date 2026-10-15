@@ -7,7 +7,7 @@
 #   NOTARY_PROFILE=jaffloop scripts/build-app.sh   # also notarize + staple (see README)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VERSION="${VERSION:-0.0.2}"
+VERSION="${VERSION:-0.0.3}"
 OUT="dist"
 APP="$OUT/Jaffloop.app"
 
@@ -35,7 +35,7 @@ echo "==> codesign"
 OPTS=(--force --timestamp --options runtime --sign "$SIGN_IDENTITY")
 [ "$SIGN_IDENTITY" = "-" ] && OPTS=(--force --sign -)
 codesign "${OPTS[@]}" "$APP/Contents/MacOS/jaffloop-mcp"
-codesign "${OPTS[@]}" --entitlements scripts/Jaffloop.entitlements "$APP"
+codesign "${OPTS[@]}" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
 ZIP="$OUT/Jaffloop-$VERSION.zip"

@@ -2,7 +2,7 @@
 
 A macOS menu bar app for engineering managers. It tracks **what you owe people, what they owe you, what to bring up with them, and what you told them**, so nothing from a fast-moving week gets lost.
 
-Capture in one line. Everything stays on your Mac. Claude can read and write your data through a local MCP server, and the app itself has no AI and makes no network calls.
+Capture in one line. Everything stays on your Mac. Claude can read and write your data through a local MCP server, and the app itself has no AI. It makes no network calls, except an update check when you press the button (or turn on the daily check).
 
 ![Today](docs/screenshots/today-dark.png)
 
@@ -11,15 +11,17 @@ Capture in one line. Everything stays on your Mac. Claude can read and write you
 - **One-line capture** with a global hotkey (default `⌥Space`, or record your own in Settings). Parsed locally and live, shown as chips.
 - **Six item kinds**: `owe`, `wait`, `bring`, `task`, `said`, `note`.
 - **Today** with sections for Slipping, Overdue, Today, Waiting on (stale), Check in (people past their 1:1 cadence) and Inbox.
-- **Person pages** with a cadence ring, last 1:1, next meeting, and four sections: I owe them, They owe me, Bring up, Said log.
+- **Person pages** with a cadence ring, last 1:1, and four sections: I owe them, They owe me, Bring up, Said log.
 - **Promise ledger**, **Inbox triage by keyboard**, **⌘K search** (FTS5, with `@person`, `kind:`, `before:` filters).
-- **Pre-meeting brief** 10 minutes before a calendar event with a person you track, and a **morning brief** on weekdays.
+- **Person brief** (prep before you talk) and a **morning brief** on weekdays. No calendar access: your calendar app already reminds you of meetings.
+- **Keyboard-first lists**, **undo** (⌘Z toast), a details drawer, inline title editing, multi-select with bulk actions, and drag-to-assign.
 - **Local notifications** with Done / Snooze actions, quiet hours, and batching.
+- **What's new and roadmap** inside the app, shown once after you update. See also [`docs/CHANGELOG.md`](docs/CHANGELOG.md) and [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - **MCP server** (`jaffloop-mcp`) with 12 tools and 3 resources, a read-only mode, per-person hiding, and an audit log.
 
-| Capture | Pre-meeting brief |
+| Capture | Inbox |
 | --- | --- |
-| ![Capture bar](docs/screenshots/capture.png) | ![Pre-meeting card](docs/screenshots/premeeting.png) |
+| ![Capture bar](docs/screenshots/capture.png) | ![Inbox](docs/screenshots/inbox.png) |
 
 | Person page | Promise ledger |
 | --- | --- |
@@ -32,6 +34,32 @@ Capture in one line. Everything stays on your Mac. Claude can read and write you
 | Light mode | Claude (MCP) settings |
 | --- | --- |
 | ![Light](docs/screenshots/today-light.png) | ![MCP settings](docs/screenshots/settings-mcp.png) |
+
+| Details drawer | What's new and roadmap |
+| --- | --- |
+| ![Drawer](docs/screenshots/drawer.png) | ![What's new](docs/screenshots/whats-new.png) |
+
+| Appearance, accent, density |
+| --- |
+| ![General settings](docs/screenshots/settings-general.png) |
+
+## Keyboard
+
+In any list (Today, Ledger, person pages, tags):
+
+| Key | Does |
+| --- | --- |
+| `j` `k` or `↓` `↑` | Move the selection |
+| `⏎` | Complete (all marked items if you used `x`) |
+| `s` | Snooze to tomorrow 09:00 |
+| `e` | Edit the title (or double-click it) |
+| `space` | Open or close the details drawer |
+| `x` | Mark for bulk actions (or shift-click) |
+| `p` | Pin or unpin |
+| `⌫` | Drop |
+| `esc` | Clear marks, close the drawer, clear the selection |
+| `⌘Z` | Undo, while the toast is showing |
+| `⌘K` | Search |
 
 ## Capture syntax
 
@@ -54,15 +82,19 @@ Dates: `today`, `tomorrow`, weekdays, `next mon`, `15 nov`, `in 2h`, `eod`, `eow
 
 Requires macOS 14 or later on Apple Silicon.
 
-1. Download `Jaffloop-0.0.2.zip` from [Releases](../../releases) and unzip it.
+1. Download `Jaffloop-0.0.3.zip` from [Releases](../../releases) and unzip it.
 2. Move `Jaffloop.app` to `/Applications`.
 3. Open it. See [Signing](#signing-and-notarization) if macOS says it cannot verify the app.
 
-Verify the download against `Jaffloop-0.0.2.zip.sha256`:
+Verify the download against `Jaffloop-0.0.3.zip.sha256`:
 
 ```sh
-shasum -a 256 -c Jaffloop-0.0.2.zip.sha256
+shasum -a 256 -c Jaffloop-0.0.3.zip.sha256
 ```
+
+## Updating
+
+Jaffloop never updates itself. In Settings, then About, press **Check for updates**: it asks GitHub for the latest release, tells you if there is a newer one, and links to the download. Unzip, quit Jaffloop, and replace it in Applications. Your data lives in `~/Library/Application Support/Jaffloop/` and is untouched. The first time you open a new version, the **What's new** page shows what changed. Turn on the daily check in Settings if you want the sidebar to tell you when an update exists.
 
 ## Use it with Claude
 
@@ -97,7 +129,7 @@ Jaffloop is distributed outside the Mac App Store, because the MCP server needs 
 `scripts/build-app.sh` does the following:
 
 1. Builds a release binary and assembles `Jaffloop.app` (the app and `jaffloop-mcp` in `Contents/MacOS`).
-2. Signs the nested `jaffloop-mcp` first, then the app, with `--options runtime --timestamp`. The only entitlement is read-only calendar access (`scripts/Jaffloop.entitlements`).
+2. Signs the nested `jaffloop-mcp` first, then the app, with `--options runtime --timestamp`. It uses no entitlements.
 3. Verifies with `codesign --verify --deep --strict`.
 4. Zips with `ditto` and writes a SHA-256 checksum.
 5. If `NOTARY_PROFILE` is set, submits to Apple, waits, staples the ticket, and checks with `spctl`.
@@ -124,7 +156,7 @@ codesign --verify --deep --strict /Applications/Jaffloop.app
 spctl --assess --type execute --verbose /Applications/Jaffloop.app   # "accepted, source=Notarized Developer ID"
 ```
 
-**Release status:** the v0.0.2 zip on GitHub is Developer ID signed with the hardened runtime and **notarized and stapled by Apple**, so it opens on first launch without a Gatekeeper warning. The v0.0.1 zip was signed but not notarized.
+**Release status:** the v0.0.3 zip on GitHub is Developer ID signed with the hardened runtime and **notarized and stapled by Apple**, so it opens on first launch without a Gatekeeper warning. The v0.0.1 zip was signed but not notarized.
 
 ## Not in v1
 

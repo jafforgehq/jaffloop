@@ -238,6 +238,9 @@ public final class Store {
         }
     }
 
+    /// Writes an earlier copy of an item back unchanged (undo). Keeps its original timestamps.
+    public func restore(_ item: Item) throws { try db.write { try item.update($0) } }
+
     public func reopen(_ id: String, now: Date = Date()) throws {
         try update(id, now: now) { $0.status = .open; $0.completedAt = nil }
     }
@@ -278,10 +281,6 @@ public final class Store {
 
     public func interactions(personId: String, limit: Int = 10) throws -> [Interaction] {
         try db.read { try Interaction.filter(Column("person_id") == personId).order(Column("occurred_at").desc).limit(limit).fetchAll($0) }
-    }
-
-    public func hasInteraction(eventId: String) -> Bool {
-        (try? db.read { try Interaction.filter(Column("calendar_event_id") == eventId).fetchCount($0) > 0 }) ?? false
     }
 
     // Search

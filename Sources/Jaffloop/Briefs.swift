@@ -2,57 +2,6 @@ import SwiftUI
 import AppKit
 import JaffloopCore
 
-// MARK: - Pre-meeting card
-
-struct PreMeetingCard: View {
-    @EnvironmentObject var model: AppModel
-    let person: Person
-    let event: CalEvent
-    var onOpen: () -> Void
-    var onDismiss: () -> Void
-    @State private var shown = false
-
-    var body: some View {
-        let owe = model.items(for: person.id, kind: .owe)
-        let wait = model.items(for: person.id, kind: .wait)
-        let bring = model.items(for: person.id, kind: .bring)
-        let top = Array((owe + wait + bring).prefix(3))
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Avatar(person: person, size: 28)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(event.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                    Text("\(Fmt.short(event.start, "HH:mm")) · in \(max(0, Int(event.start.timeIntervalSinceNow / 60))) min").font(Theme.date).foregroundStyle(Theme.text2)
-                }
-                Spacer()
-                Button(action: onDismiss) { Image(systemName: "xmark").font(.system(size: 10)).foregroundStyle(Theme.text2) }.buttonStyle(.plain)
-            }
-            HStack(spacing: 14) {
-                count("\(owe.count)", "you owe", .owe); count("\(wait.count)", "they owe", .wait); count("\(bring.count)", "to bring up", .bring)
-            }
-            Rectangle().fill(Theme.hairline).frame(height: 0.5)
-            if top.isEmpty { Text("Nothing open with \(person.name.split(separator: " ").first.map(String.init) ?? person.name).").font(.system(size: 12.5)).foregroundStyle(Theme.text2) }
-            VStack(spacing: 0) { ForEach(top) { ItemRow(item: $0, showPerson: false, compact: true) } }
-            HStack { PrimaryButton(title: "Open brief", action: onOpen); GhostButton(title: "Dismiss", action: onDismiss) }
-        }
-        .padding(16).frame(width: 380)
-        .background(RoundedRectangle(cornerRadius: 16).fill(model.snapshot ? Theme.elevated : Theme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.hairline, lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
-        .padding(30)
-        .offset(y: shown || model.snapshot ? 0 : 60).opacity(shown || model.snapshot ? 1 : 0)
-        .onAppear { withAnimation(.spring(response: Motion.reduced ? 0.2 : 0.45, dampingFraction: 0.78)) { shown = true } }
-    }
-
-    func count(_ n: String, _ l: String, _ k: ItemKind) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(Theme.kind(k)).frame(width: 6, height: 6)
-            Text(n).font(.system(size: 13, weight: .semibold).monospacedDigit())
-            Text(l).font(.system(size: 11.5)).foregroundStyle(Theme.text2)
-        }
-    }
-}
-
 // MARK: - Person brief / morning brief
 
 struct PersonBriefView: View {
@@ -84,21 +33,6 @@ struct MorningBriefView: View {
         let due = model.openItems.filter { $0.kind == .owe && ($0.dueAt.map { $0 < endOfDay } ?? false) }
         let waits = model.openItems.filter { $0.kind == .wait && (Rules.isStaleWait($0, now: Date(), settings: model.settings) || Rules.isOverdue($0, now: Date())) }
         Page("Good morning", subtitle: Fmt.short(Date(), "EEEE, d MMMM")) {
-            SectionHeader(title: "Meetings today", count: model.meetings.count)
-            if model.meetings.isEmpty {
-                Text(model.settings.calendarEnabled ? "No meetings on your calendar." : "Calendar access is off. Enable it in Settings to see meetings here.")
-                    .font(.system(size: 12.5)).foregroundStyle(Theme.text2).padding(8)
-            }
-            ForEach(model.meetings) { e in
-                HStack(spacing: 10) {
-                    Text(Fmt.short(e.start, "HH:mm")).font(Theme.date).foregroundStyle(Theme.text2).frame(width: 46, alignment: .leading)
-                    Text(e.title).font(Theme.row)
-                    Spacer()
-                    if let p = CalendarService.match(e, people: model.summaries.map { $0.person }) {
-                        Avatar(person: p, size: 16); Text(p.name).font(.system(size: 11.5)).foregroundStyle(Theme.text2)
-                    }
-                }.padding(.vertical, 5).padding(.horizontal, 8)
-            }
             SectionHeader(title: "You owe, due today or earlier", count: due.count)
             ItemList(items: due)
             SectionHeader(title: "Owed to you, stale or late", count: waits.count)
@@ -113,6 +47,7 @@ struct MorningBriefView: View {
 
 struct PopoverView: View {
     @EnvironmentObject var model: AppModel
+    @State private var quick = ""
 
     var body: some View {
         let t = model.today
@@ -139,6 +74,12 @@ struct PopoverView: View {
                 if model.snapshot { content } else { ScrollView { content } }
             }
             Spacer(minLength: 0)
+            Rectangle().fill(Theme.hairline).frame(height: 0.5)
+            HStack(spacing: 8) {
+                Image(systemName: "plus").font(.system(size: 11)).foregroundStyle(Theme.text2)
+                TextField("Quick add — owe @sara review RFC fri", text: $quick).textFieldStyle(.plain).font(.system(size: 13))
+                    .onSubmit { model.save(quick); quick = "" }
+            }.padding(.horizontal, 16).padding(.vertical, 10)
         }
         .frame(width: 400, height: 460)
         .background(Theme.bg)
@@ -149,22 +90,21 @@ struct PopoverView: View {
 
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
-    var calendar: CalendarService
     var onHotkeyChange: () -> Bool
     @State private var tab: String
     @State private var copied = false
 
-    init(calendar: CalendarService, onHotkeyChange: @escaping () -> Bool, initialTab: String = "general") {
-        self.calendar = calendar; self.onHotkeyChange = onHotkeyChange; _tab = State(initialValue: initialTab)
+    init(onHotkeyChange: @escaping () -> Bool, initialTab: String = "general") {
+        self.onHotkeyChange = onHotkeyChange; _tab = State(initialValue: initialTab)
     }
 
     var body: some View {
         TabView(selection: $tab) {
             general.tabItem { Label("General", systemImage: "gearshape") }.tag("general")
             notifications.tabItem { Label("Notifications", systemImage: "bell") }.tag("notifications")
-            calendarTab.tabItem { Label("Calendar", systemImage: "calendar") }.tag("calendar")
             mcp.tabItem { Label("Claude (MCP)", systemImage: "sparkles") }.tag("mcp")
             data.tabItem { Label("Data", systemImage: "externaldrive") }.tag("data")
+            about.tabItem { Label("About", systemImage: "info.circle") }.tag("about")
         }
         .frame(width: 560, height: 460)
     }
@@ -186,12 +126,51 @@ struct SettingsView: View {
     var general: some View {
         Form {
             LabeledContent("Capture hotkey") { HotkeyRecorder(apply: onHotkeyChange) }
-            Picker("Density", selection: bind(\.compact)) { Text("Comfortable").tag(false); Text("Compact").tag(true) }
+            Picker("Appearance", selection: $model.appearance) { ForEach(AppearanceChoice.allCases) { Text($0.label).tag($0) } }
+                .onChange(of: model.appearance) { _, a in NSApp.appearance = a.nsAppearance }
+            LabeledContent("Accent") {
+                HStack(spacing: 10) {
+                    ForEach(AccentChoice.allCases) { a in
+                        Button { model.accent = a } label: {
+                            Circle().fill(a.color).frame(width: 18, height: 18)
+                                .overlay(Circle().strokeBorder(Color.primary.opacity(model.accent == a ? 0.9 : 0), lineWidth: 2).padding(-3))
+                        }.buttonStyle(.plain).help(a.label).accessibilityLabel("\(a.label) accent").accessibilityAddTraits(model.accent == a ? .isSelected : [])
+                    }
+                }
+            }
+            Picker("Row density", selection: $model.density) { ForEach(Density.allCases) { Text($0.label).tag($0) } }.pickerStyle(.segmented)
+            VStack(spacing: 4) {
+                ForEach(Density.allCases) { d in
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(d.label.uppercased()).font(.system(size: 10, weight: .medium)).tracking(0.7).foregroundStyle(.secondary).padding(.leading, 8).padding(.top, 4)
+                        ItemRow(item: Self.sample, showPerson: false, densityOverride: d).allowsHitTesting(false)
+                    }
+                    .background(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.accent, lineWidth: model.density == d ? 1.2 : 0))
+                }
+            }
             Toggle("Haptic feedback on completing an item", isOn: bind(\.haptics))
             Toggle("Sounds (save click, completion tone)", isOn: bind(\.sound))
             DatePicker("End of day (eod)", selection: timeBinding(\.eodTime), displayedComponents: .hourAndMinute)
             Stepper("Stale wait: \(model.settings.staleDaysAfterDue) days after due", value: bind(\.staleDaysAfterDue), in: 1...30)
             Stepper("Stale undated wait: \(model.settings.staleDaysNoDue) days after creation", value: bind(\.staleDaysNoDue), in: 1...30)
+        }.formStyle(.grouped)
+    }
+
+    static let sample = Item(kind: .owe, title: "Review RFC for the on-call rotation", body: "Sara asked for comments before Friday",
+                             dueAt: Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: Date())))
+
+    var about: some View {
+        Form {
+            LabeledContent("Version", value: AppInfo.version)
+            Section("Updates") {
+                UpdatePanel(updates: model.updates)
+                Toggle("Check for updates once a day", isOn: $model.autoUpdateCheck)
+                Text("Off by default. Jaffloop makes no network calls except when you press Check for updates or turn this on. Nothing is downloaded or installed for you.")
+                    .font(.system(size: 11.5)).foregroundStyle(.secondary)
+            }
+            Section("Release notes") {
+                Button("What's new and roadmap") { model.nav = .releases; model.openMain() }
+            }
         }.formStyle(.grouped)
     }
 
@@ -201,20 +180,6 @@ struct SettingsView: View {
             DatePicker("Working hours end", selection: timeBinding(\.workEnd), displayedComponents: .hourAndMinute)
             DatePicker("Morning brief (weekdays)", selection: timeBinding(\.morningBrief), displayedComponents: .hourAndMinute)
             Text("No notifications outside working hours or on weekends, except reminders you set explicitly. At most one notification every 10 minutes; items in the same window are batched.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-        }.formStyle(.grouped)
-    }
-
-    var calendarTab: some View {
-        Form {
-            Toggle("Use my calendar for pre-meeting and morning briefs", isOn: Binding(get: { model.settings.calendarEnabled }, set: { on in
-                model.updateSettings { $0.calendarEnabled = on }
-                if on { calendar.requestAccess { _ in model.reload() } }
-            }))
-            LabeledContent("Access", value: calendar.status)
-            Stepper("Pre-meeting brief: \(model.settings.preMeetingMinutes) min before", value: bind(\.preMeetingMinutes), in: 2...60)
-            Stepper("Only meetings with \(model.settings.maxAttendees) attendees or fewer", value: bind(\.maxAttendees), in: 2...20)
-            Text("Read-only. Events are matched to people by attendee email (set on the person), falling back to their name in the event title.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
         }.formStyle(.grouped)
     }
@@ -260,7 +225,7 @@ struct SettingsView: View {
                 let p = NSSavePanel(); p.nameFieldStringValue = "jaffloop-export.json"
                 if p.runModal() == .OK, let u = p.url, let d = try? model.store.exportJSON() { try? d.write(to: u) }
             }
-            Text("Everything stays on this Mac. Jaffloop makes no network calls.").font(.system(size: 12)).foregroundStyle(.secondary)
+            Text("Everything stays on this Mac. The only network call is the update check, and only when you ask for it.").font(.system(size: 12)).foregroundStyle(.secondary)
         }.formStyle(.grouped)
     }
 }

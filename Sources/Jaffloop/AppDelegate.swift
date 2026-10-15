@@ -7,17 +7,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var model: AppModel!
     let hotkey = HotkeyManager()
     let notifier = NotificationService()
-    let calendar = CalendarService()
     var capturePanel: CapturePanel!
     var statusItem: NSStatusItem!
     let popover = NSPopover()
     var mainWindow: NSWindow?
     var settingsWindow: NSWindow?
     var briefWindow: NSWindow?
-    var cardPanel: NSPanel?
     var cancellables = Set<AnyCancellable>()
-    var shownEvents = Set<String>()
-    var meetingTimer: Timer?
 
     func applicationDidFinishLaunching(_ n: Notification) {
         let args = CommandLine.arguments
@@ -34,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let a = NSAlert(); a.messageText = "Jaffloop could not open its database"; a.informativeText = "\(error)"; a.runModal(); NSApp.terminate(nil); return
         }
         NSApp.setActivationPolicy(.regular)
+        NSApp.appearance = model.appearance.nsAppearance
         buildMenu()
         wireModel()
         setupStatusItem()
@@ -42,15 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hotkey.onFire = { [weak self] in self?.toggleCapture() }
         hotkey.register(model.settings.hotkey)
 
-        notifier.model = model; notifier.calendar = calendar
+        notifier.model = model
         notifier.start()
         notifier.reschedule()
         model.startWatching()
-
-        calendar.refreshAuthorization()
-        if model.settings.calendarEnabled, !calendar.authorized { calendar.requestAccess { _ in self.pollCalendar() } }
-        meetingTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.pollCalendar() }
-        pollCalendar()
+        model.updates.checkIfDue(enabled: model.autoUpdateCheck)
 
         if !args.contains("--background") { openMain() }
     }
@@ -76,6 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.notifier.reschedule()
         }
         model.$captureBlip.dropFirst().sink { [weak self] _ in self?.flyDot() }.store(in: &cancellables)
+        model.$appearance.dropFirst().sink { a in NSApp.appearance = a.nsAppearance }.store(in: &cancellables)
+        model.$nav.sink { [weak self] n in self?.mainWindow?.title = self?.model.navTitle(n) ?? "Jaffloop" }.store(in: &cancellables)
     }
 
     func toggleCapture() {
@@ -87,7 +82,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: status item
 
     func setupStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.button?.imagePosition = .imageLeft
+        statusItem.button?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
         statusItem.button?.image = LoopIcon.image(dot: false)
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
@@ -98,7 +95,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updateStatusIcon()
     }
 
-    func updateStatusIcon() { statusItem?.button?.image = LoopIcon.image(dot: model.overdueCount > 0) }
+    func updateStatusIcon() {
+        let n = model.overdueCount
+        statusItem?.button?.image = LoopIcon.image(dot: n > 0)
+        statusItem?.button?.title = n > 0 ? " \(n)" : ""
+        statusItem?.button?.toolTip = n > 0 ? "\(n) overdue or slipping" : "Jaffloop"
+    }
 
     @objc func statusClicked() {
         if NSApp.currentEvent?.type == .rightMouseUp {
@@ -171,7 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if mainWindow == nil {
             let w = host(MainView(), size: NSSize(width: 1080, height: 700), title: "Jaffloop", style: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView])
             w.titlebarAppearsTransparent = true
-            w.titleVisibility = .hidden
+            w.titleVisibility = .visible
+            w.title = model.navTitle(model.nav)
             w.setFrameAutosaveName("JaffloopMain")
             w.center()
             mainWindow = w
@@ -182,7 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func openSettings() {
         if settingsWindow == nil {
-            settingsWindow = host(SettingsView(calendar: calendar, onHotkeyChange: { [weak self] in
+            settingsWindow = host(SettingsView(onHotkeyChange: { [weak self] in
                 guard let self else { return false }
                 return self.hotkey.register(self.model.settings.hotkey)
             }), size: NSSize(width: 560, height: 460), title: "Jaffloop Settings")
@@ -192,7 +195,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func openMorningBrief() {
-        pollCalendar()
         briefWindow?.close()
         briefWindow = host(MorningBriefView(), size: NSSize(width: 620, height: 560), title: "Morning brief", style: [.titled, .closable, .resizable])
         NSApp.activate(ignoringOtherApps: true)
@@ -204,39 +206,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         briefWindow = host(PersonBriefView(person: p), size: NSSize(width: 620, height: 560), title: "Brief: \(p.name)", style: [.titled, .closable, .resizable])
         NSApp.activate(ignoringOtherApps: true)
         briefWindow?.makeKeyAndOrderFront(nil)
-    }
-
-    // MARK: calendar
-
-    func pollCalendar() {
-        guard model.settings.calendarEnabled else { model.meetings = []; return }
-        calendar.refreshAuthorization()
-        let cal = Calendar.current
-        let start = cal.startOfDay(for: Date()), end = cal.date(byAdding: .day, value: 1, to: start)!
-        model.meetings = calendar.events(from: start, to: end)
-        let s = model.settings
-        let people = model.summaries.map { $0.person }
-        for e in model.meetings where e.start > Date() && e.start.timeIntervalSinceNow <= Double(s.preMeetingMinutes) * 60 && e.attendeeCount <= s.maxAttendees && !shownEvents.contains(e.id) {
-            guard let p = CalendarService.match(e, people: people) else { continue }
-            shownEvents.insert(e.id)
-            let items = model.openItems.filter { $0.personId == p.id && [.owe, .wait, .bring].contains($0.kind) }
-            notifier.postPreMeeting(person: p, event: e, items: items)
-            showCard(person: p, event: e)
-        }
-    }
-
-    func showCard(person: Person, event: CalEvent) {
-        cardPanel?.orderOut(nil)
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 340), styleMask: [.nonactivatingPanel, .borderless], backing: .buffered, defer: false)
-        panel.isFloatingPanel = true; panel.level = .floating; panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        let v = PreMeetingCard(person: person, event: event, onOpen: { [weak self] in panel.orderOut(nil); self?.openPersonBrief(person) }, onDismiss: { panel.orderOut(nil) })
-            .environmentObject(model)
-        let h = NSHostingView(rootView: v); h.sizingOptions = []
-        panel.contentView = h
-        if let f = NSScreen.main?.visibleFrame { panel.setFrameOrigin(NSPoint(x: f.maxX - 440, y: f.minY)) }
-        panel.orderFrontRegardless()
-        cardPanel = panel
     }
 
     // MARK: menu
@@ -251,6 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let appItem = NSMenuItem(); main.addItem(appItem)
         let app = NSMenu(); appItem.submenu = app
         add(app, "About Jaffloop", #selector(NSApplication.orderFrontStandardAboutPanel(_:)))
+        add(app, "Check for Updates…", #selector(menuUpdates), target: self)
         app.addItem(.separator())
         add(app, "Settings…", #selector(menuSettings), ",", target: self)
         app.addItem(.separator())
@@ -265,7 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         let editItem = NSMenuItem(); main.addItem(editItem)
         let edit = NSMenu(title: "Edit"); editItem.submenu = edit
-        add(edit, "Undo", Selector(("undo:")), "z"); add(edit, "Redo", Selector(("redo:")), "z", [.command, .shift])
+        add(edit, "Undo", #selector(menuUndo), "z", target: self); add(edit, "Redo", Selector(("redo:")), "z", [.command, .shift])
         edit.addItem(.separator())
         add(edit, "Cut", #selector(NSText.cut(_:)), "x"); add(edit, "Copy", #selector(NSText.copy(_:)), "c")
         add(edit, "Paste", #selector(NSText.paste(_:)), "v"); add(edit, "Select All", #selector(NSText.selectAll(_:)), "a")
@@ -282,7 +252,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         add(win, "Minimize", #selector(NSWindow.performMiniaturize(_:)), "m")
         add(win, "Jaffloop", #selector(menuOpen), "0", target: self)
         NSApp.windowsMenu = win
+
+        let helpItem = NSMenuItem(); main.addItem(helpItem)
+        let help = NSMenu(title: "Help"); helpItem.submenu = help
+        add(help, "What's New and Roadmap", #selector(menuWhatsNew), target: self)
+        NSApp.helpMenu = help
         NSApp.mainMenu = main
+    }
+
+    @objc func menuWhatsNew() { openMain(); model.nav = .releases }
+    @objc func menuUpdates() { openMain(); model.nav = .releases; model.updates.check() }
+    /// ⌘Z undoes the last action while its toast is showing, otherwise text undo as usual.
+    @objc func menuUndo() {
+        if model.toast?.undo != nil { model.undoLast() } else { NSApp.sendAction(Selector(("undo:")), to: nil, from: nil) }
     }
 
     @objc func menuSearch() { openMain(); model.showSearch.toggle() }

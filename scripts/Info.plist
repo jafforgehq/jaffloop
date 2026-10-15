@@ -13,8 +13,6 @@
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
-  <key>NSCalendarsUsageDescription</key><string>Jaffloop reads your calendar (read-only) to prepare briefs before meetings with people you track.</string>
-  <key>NSCalendarsFullAccessUsageDescription</key><string>Jaffloop reads your calendar (read-only) to prepare briefs before meetings with people you track.</string>
   <key>NSHumanReadableCopyright</key><string>© 2026 Jafforge</string>
 </dict>
 </plist>

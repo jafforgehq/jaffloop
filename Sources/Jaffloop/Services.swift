@@ -94,7 +94,6 @@ enum LoopIcon {
 final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     static let prefix = "jaffloop."
     var model: AppModel?
-    var calendar: CalendarService?
     private var center: UNUserNotificationCenter? { Bundle.main.bundleIdentifier != nil && Bundle.main.bundlePath.hasSuffix(".app") ? UNUserNotificationCenter.current() : nil }
     private var pending: DispatchWorkItem?
 
@@ -107,7 +106,6 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             UNNotificationCategory(identifier: "REMINDER", actions: [a("done", "Done"), a("snooze", "Snooze 1h"), a("open", "Open")], intentIdentifiers: []),
             UNNotificationCategory(identifier: "DUE", actions: [a("openLedger", "Open ledger"), a("snoozeAll", "Snooze all")], intentIdentifiers: []),
             UNNotificationCategory(identifier: "STALE", actions: [a("received", "Mark received"), a("nudge", "Nudge"), a("snooze", "Snooze 1h")], intentIdentifiers: []),
-            UNNotificationCategory(identifier: "PRE", actions: [a("openBrief", "Open brief"), a("dismiss", "Dismiss")], intentIdentifiers: []),
             UNNotificationCategory(identifier: "MORNING", actions: [a("openMorning", "Open brief")], intentIdentifiers: []),
         ])
     }
@@ -209,16 +207,6 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         return d.addingTimeInterval(3600)
     }
 
-    func postPreMeeting(person: Person, event: CalEvent, items: [Item]) {
-        guard let c = center else { return }
-        let top = items.prefix(3).map { $0.title }.joined(separator: " · ")
-        let n = UNMutableNotificationContent()
-        n.title = "\(event.title) in \(max(1, Int(event.start.timeIntervalSinceNow / 60))) min"
-        n.body = items.isEmpty ? "Nothing open with \(person.name)." : "\(items.count) open · \(top)"
-        n.categoryIdentifier = "PRE"; n.threadIdentifier = "pre"; n.userInfo = ["person": person.id]
-        c.add(UNNotificationRequest(identifier: Self.prefix + "pre.\(event.id)", content: n, trigger: nil))
-    }
-
     // MARK: delegate
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions { [.banner, .list] }
@@ -240,9 +228,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                     NSPasteboard.general.setString("Hi \(p.name.split(separator: " ").first.map(String.init) ?? p.name), quick check-in on \(item.title). Any update?", forType: .string)
                 }
             case "openLedger": model.nav = .ledger; model.openMain()
-            case "openBrief": if let pid = info["person"] as? String, let p = model.person(pid) { model.openPersonBrief(p) }
             case "openMorning": model.openMorningBrief()
-            case "dismiss": break
             default:
                 if let item, let pid = item.personId { model.nav = .person(pid) } else { model.nav = .today }
                 model.openMain()

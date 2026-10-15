@@ -44,6 +44,37 @@ struct SectionHeader: View {
     }
 }
 
+/// Section header with a chevron; click to collapse. State is remembered per key.
+struct SectionBlock<Content: View>: View {
+    @EnvironmentObject var model: AppModel
+    let key: String
+    let title: String
+    let count: Int
+    var tint: Color = Theme.text2
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        let isCollapsed = model.collapsed.contains(key)
+        VStack(alignment: .leading, spacing: 0) {
+            Button { withAnimation(Motion.ease(0.2)) { model.toggleCollapsed(key) } } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.text2)
+                        .rotationEffect(.degrees(isCollapsed ? 0 : 90)).frame(width: 10)
+                    Text(title.uppercased()).font(Theme.caps).tracking(0.8).foregroundStyle(tint)
+                    Text("\(count)").font(.system(size: 11.5).monospacedDigit()).foregroundStyle(Theme.text2)
+                    Rectangle().fill(Theme.hairline).frame(height: 0.5)
+                }
+                .contentShape(Rectangle())
+                .modifier(FocusRing(radius: 4))
+            }
+            .buttonStyle(.plain).padding(.top, 20).padding(.bottom, 4)
+            .accessibilityLabel("\(title), \(count) items, \(isCollapsed ? "collapsed" : "expanded")")
+            .accessibilityAddTraits(.isHeader)
+            if !isCollapsed { content }
+        }
+    }
+}
+
 /// An empty section collapsed to one dim line instead of a header plus a blank block.
 struct EmptySection: View {
     let title: String
@@ -64,7 +95,7 @@ struct FocusRing: ViewModifier {
     @Environment(\.isFocused) private var focused
     var radius: CGFloat = 7
     func body(content: Content) -> some View {
-        content.overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(Theme.text2, lineWidth: focused ? 1.5 : 0).padding(-2))
+        content.overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(Theme.accent, lineWidth: focused ? 1.5 : 0).padding(-2))
     }
 }
 
@@ -185,6 +216,8 @@ struct CadenceRing: View {
     var overdue: Bool
     var size: CGFloat = 56
     @State private var shown = false
+    @State private var pulse = false
+    @EnvironmentObject var model: AppModel
 
     var body: some View {
         let target: Double = {
@@ -198,12 +231,18 @@ struct CadenceRing: View {
                 Circle().trim(from: 0, to: shown ? target : 0)
                     .stroke(overdue ? Theme.clay : Theme.text2, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    .animation(.easeOut(duration: Motion.reduced ? 0.1 : 0.8), value: shown)
+                    .animation(.easeOut(duration: Motion.reduced ? 0.1 : 0.8), value: shown ? target : 0)
             }
             Avatar(person: person, size: size - 12)
         }
         .frame(width: size, height: size)
+        .scaleEffect(pulse ? 1.12 : 1)
         .onAppear { shown = true }
+        .onChange(of: model.pulsePersonId) { _, id in
+            guard id == person.id, !Motion.reduced else { return }
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) { pulse = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) { pulse = false } }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(person.cadenceDays == nil ? "No 1:1 cadence" : (overdue ? "Past 1:1 cadence" : "Within 1:1 cadence"))
     }
@@ -245,6 +284,7 @@ struct ItemRow: View {
     var showPerson = true
     var showKind = true
     var compact = false
+    var densityOverride: Density?
 
     @State private var hovering = false
     @State private var ringHover = false
@@ -252,14 +292,19 @@ struct ItemRow: View {
     @State private var collapsed = false
     @State private var ghost: String?
     @State private var appeared = false
+    @State private var editing = false
+    @State private var draft = ""
+    @FocusState private var editFocus: Bool
 
-    private var dense: Bool { compact || model.settings.compact }
+    private var density: Density { compact ? .compact : (densityOverride ?? model.density) }
     private var overdue: Bool { Rules.isOverdue(item, now: Date()) }
     private var slipping: Bool { Rules.isSlipping(item) }
+    private var selected: Bool { model.selectedItemId == item.id }
+    private var inMulti: Bool { model.multi.contains(item.id) }
 
     var body: some View {
         content
-            .padding(.vertical, dense ? 4 : 7)
+            .padding(.vertical, density.rowPad)
             .frame(height: collapsed ? 0 : nil, alignment: .top)
             .clipped()
             .opacity(appeared || model.snapshot ? 1 : 0)
@@ -268,6 +313,15 @@ struct ItemRow: View {
                 guard !appeared else { return }
                 withAnimation(.easeOut(duration: 0.25).delay(Double(min(index, 14)) * 0.024)) { appeared = true }
             }
+            .onChange(of: model.triggerComplete) { _, id in
+                guard id == item.id else { return }
+                model.triggerComplete = nil; finish()
+            }
+            .onChange(of: model.triggerEdit) { _, id in
+                guard id == item.id else { return }
+                model.triggerEdit = nil; beginEdit()
+            }
+            .id(item.id)
     }
 
     private var content: some View {
@@ -282,8 +336,15 @@ struct ItemRow: View {
             .accessibilityLabel("Complete \(item.title)")
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(item.title).font(Theme.row).foregroundStyle(Theme.text).lineLimit(1).truncationMode(.tail).help(item.title)
-                if let b = item.body, !b.isEmpty, !dense {
+                if editing {
+                    TextField("Title", text: $draft).textFieldStyle(.plain).font(density.titleFont).focused($editFocus)
+                        .onSubmit { commitEdit() }
+                        .onExitCommand { editing = false }
+                } else {
+                    Text(item.title).font(density.titleFont).foregroundStyle(Theme.text).lineLimit(1).truncationMode(.tail).help(item.title)
+                        .onTapGesture(count: 2) { beginEdit() }
+                }
+                if let b = item.body, !b.isEmpty, density.showsBody {
                     Text(b).font(.system(size: 11.5)).foregroundStyle(Theme.text2).lineLimit(1)
                 }
             }
@@ -294,14 +355,21 @@ struct ItemRow: View {
 
             Spacer(minLength: 8)
 
+            if !compact, let n = ItemAge.badge(item, now: Date()) {
+                Text("\(n)d").font(Theme.mono).foregroundStyle(n >= 10 ? Theme.clay : Theme.text2)
+                    .help("Open for \(n) days, since \(Fmt.short(item.createdAt, "EEEE d MMMM"))")
+            }
             if item.pinned { Image(systemName: "pin.fill").font(.system(size: 9)).foregroundStyle(Theme.text2) }
             if slipping {
-                Text("slipping ×\(item.snoozeCount)").font(Theme.mono).foregroundStyle(.white)
+                Text(compact ? "×\(item.snoozeCount)" : "slipping ×\(item.snoozeCount)").font(Theme.mono).foregroundStyle(.white)
+                    .lineLimit(1).fixedSize()
                     .padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill(Theme.clay))
             }
-            if hovering && ghost == nil {
+            if hovering && ghost == nil && !editing {
                 SnoozeMenu { snooze(until: $0) }
                 Menu {
+                    Button("Edit title") { beginEdit() }
+                    Button("Details") { model.selectedItemId = item.id; model.drawerItemId = item.id }
                     Button(item.pinned ? "Unpin" : "Pin to top") { model.togglePin(item) }
                     Button("Drop", role: .destructive) { model.drop(item) }
                 } label: { Image(systemName: "ellipsis").font(.system(size: 12)).foregroundStyle(Theme.text2).frame(width: 22, height: 22) }
@@ -315,25 +383,54 @@ struct ItemRow: View {
                         Avatar(person: p, size: 16)
                         Text(p.name.split(separator: " ").first.map(String.init) ?? p.name).font(.system(size: 11.5)).foregroundStyle(Theme.text2).lineLimit(1)
                     }
-                }.frame(width: Col.person, alignment: .leading)
+                }.frame(width: compact ? Col.person - 14 : Col.person, alignment: .leading)
             }
             let due = Fmt.due(item)
             Text(due ?? "").font(Theme.date).foregroundStyle(overdue ? Theme.clay : Theme.text2)
-                .frame(width: Col.date, alignment: .trailing)
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .frame(width: compact ? Col.date - 22 : Col.date, alignment: .trailing)
+                .help(Fmt.exact(item) ?? "")
                 .accessibilityLabel(due.map { overdue ? "Overdue, \($0)" : "Due \($0)" } ?? "No due date")
         }
         .offset(x: ghost != nil && !Motion.reduced ? 36 : 0)
         .padding(.horizontal, 8)
-        .background(RoundedRectangle(cornerRadius: 8).fill(hovering ? Theme.hover : .clear))
+        .background(alignment: .leading) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(inMulti ? Theme.accent.opacity(0.22) : (selected ? Theme.accent.opacity(0.13) : (hovering ? Theme.hover : .clear)))
+                if selected || inMulti {
+                    RoundedRectangle(cornerRadius: 1.5).fill(Theme.accent).frame(width: 3).padding(.vertical, 5).padding(.leading, 1)
+                }
+            }
+        }
         .contentShape(Rectangle())
         .onHover { hovering = !model.snapshot && $0 }
+        .onTapGesture {
+            if NSEvent.modifierFlags.contains(.shift) || NSEvent.modifierFlags.contains(.command) { model.toggleMulti(item.id) }
+            else { model.multi = []; model.selectedItemId = item.id }
+        }
+        .draggable(model.dragPayload(for: item.id))
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu {
             Button("Complete") { finish() }
+            Button("Edit title") { beginEdit() }
+            Button("Details") { model.selectedItemId = item.id; model.drawerItemId = item.id }
             ForEach(model.snoozePresets()) { p in Button("Snooze: \(p.label)") { snooze(until: p.date) } }
             Divider()
             Button(item.pinned ? "Unpin" : "Pin to top") { model.togglePin(item) }
             Button("Drop", role: .destructive) { model.drop(item) }
         }
+    }
+
+    private func beginEdit() {
+        draft = item.title; editing = true
+        DispatchQueue.main.async { editFocus = true }
+    }
+
+    private func commitEdit() {
+        editing = false
+        let t = draft.trimmingCharacters(in: .whitespaces)
+        if !t.isEmpty, t != item.title { model.rename(item, t) }
     }
 
     private func finish() {
@@ -369,6 +466,10 @@ struct SaidRow: View {
 
 /// "All loops closed": ring completes with a brief burst of muted dots, at most once per day.
 struct AllClosed: View {
+    @EnvironmentObject var model: AppModel
+    var title = "All loops closed"
+    var message = "Nothing owed, nothing slipping."
+    var showCapture = true
     @State private var start: Date?
     private let burst: Bool = {
         let today = Fmt.short(Date(), "yyyy-MM-dd")
@@ -403,8 +504,16 @@ struct AllClosed: View {
                     }.frame(width: 200, height: 200).allowsHitTesting(false)
                 }
             }.frame(width: 64, height: 64)
-            Text("All loops closed").font(Theme.title(20)).foregroundStyle(Theme.text)
-            Text("Nothing owed, nothing slipping.").font(.system(size: 12.5)).foregroundStyle(Theme.text2)
+            Text(title).font(Theme.title(20)).foregroundStyle(Theme.text)
+            Text(message).font(.system(size: 12.5)).foregroundStyle(Theme.text2).multilineTextAlignment(.center)
+            if showCapture {
+                Button { model.openCapture() } label: {
+                    HStack(spacing: 8) { Text("New capture").font(.system(size: 12)); Kbd(hotkeyLabel(model.settings.hotkey)) }
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.hairline, lineWidth: 0.5))
+                        .modifier(FocusRing())
+                }.buttonStyle(.plain).padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity).padding(.top, 70)
         .onAppear { start = Date(); closed = true }

@@ -112,9 +112,6 @@ public struct Settings {
     public var morningBrief = "08:30"
     public var staleDaysAfterDue = 3
     public var staleDaysNoDue = 5
-    public var preMeetingMinutes = 10
-    public var maxAttendees = 3
-    public var calendarEnabled = false
     public var mcpReadOnly = false
     public var compact = false
     public var sound = false
@@ -134,9 +131,6 @@ public struct Settings {
         s.morningBrief = d["morningBrief"] ?? s.morningBrief
         s.staleDaysAfterDue = d["staleDaysAfterDue"].flatMap(Int.init) ?? s.staleDaysAfterDue
         s.staleDaysNoDue = d["staleDaysNoDue"].flatMap(Int.init) ?? s.staleDaysNoDue
-        s.preMeetingMinutes = d["preMeetingMinutes"].flatMap(Int.init) ?? s.preMeetingMinutes
-        s.maxAttendees = d["maxAttendees"].flatMap(Int.init) ?? s.maxAttendees
-        s.calendarEnabled = d["calendarEnabled"] == "1"
         s.mcpReadOnly = d["mcpReadOnly"] == "1"
         s.compact = d["compact"] == "1"
         s.sound = d["sound"] == "1"
@@ -149,8 +143,7 @@ public struct Settings {
         let pairs: [(String, String)] = [
             ("eodTime", eodTime), ("workStart", workStart), ("workEnd", workEnd), ("morningBrief", morningBrief),
             ("staleDaysAfterDue", String(staleDaysAfterDue)), ("staleDaysNoDue", String(staleDaysNoDue)),
-            ("preMeetingMinutes", String(preMeetingMinutes)), ("maxAttendees", String(maxAttendees)),
-            ("calendarEnabled", calendarEnabled ? "1" : "0"), ("mcpReadOnly", mcpReadOnly ? "1" : "0"),
+            ("mcpReadOnly", mcpReadOnly ? "1" : "0"),
             ("compact", compact ? "1" : "0"), ("sound", sound ? "1" : "0"), ("haptics", haptics ? "1" : "0"),
             ("hotkey", hotkey),
         ]
