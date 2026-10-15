@@ -27,6 +27,8 @@ same product as the Swift 0.0.4 (same database, screens, shortcuts, MCP command)
 
 ## Open items
 
+00. **Auto update from a real release is not fully proven.** The published 0.1.0 (notarized) found 0.2.0 on GitHub, downloaded it, and handed it to Squirrel.Mac, which then asked macOS for authorization ("Jaffloop is trying to add a new helper tool") on this Mac (macOS 27) in every test copy outside /Applications, so the install never finished unattended. The same flow with locally built, unnotarized copies (0.1.0 to 0.1.1, `scripts/test-update.sh`) installed and relaunched with no prompt. Not yet known: whether a copy in /Applications prompts. To check: install `Jaffloop-0.1.0-arm64.dmg` into /Applications, open it, wait for the update dialog.
+
 1. **No LICENSE file.** Decision needed from the owner.
 2. Not exercised by hand: notification delivery and action buttons, the native menu and tray clicks, the global hotkey firing, the fly-to-menu-bar dot, sounds, an in-place update from a real published release (the update flow is tested against a local feed and, for the signed build, see the release notes in the PR/commit).
 3. Existing 0.0.x installs cannot update themselves into 0.1.0 (the Swift app only links to downloads): install it once by hand, then it updates itself.
