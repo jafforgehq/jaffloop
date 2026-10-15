@@ -6,7 +6,7 @@ import JaffloopCore
 enum Screenshots {
     static func run(into dir: URL) {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        AppInfo.override = "0.0.3"
+        AppInfo.override = "0.0.4"
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("jaffloop-shots-\(UUID().uuidString).sqlite")
         guard let pool = try? openJaffloopDatabase(at: tmp) else { NSApp.terminate(nil); return }
         let store = Store(pool)
@@ -48,6 +48,16 @@ enum Screenshots {
         model.selectedItemId = nil; model.drawerItemId = nil
         model.nav = .releases
         shot("whats-new", size: NSSize(width: 1080, height: 1120), main)
+        model.nav = .done
+        shot("done", size: NSSize(width: 1080, height: 700), main)
+        model.nav = .snoozed
+        shot("snoozed", size: NSSize(width: 1080, height: 600), main)
+        model.nav = .people
+        UserDefaults.standard.set("grid", forKey: "peopleLayout")
+        shot("people-grid", size: NSSize(width: 1080, height: 700), main)
+        UserDefaults.standard.removeObject(forKey: "peopleLayout")
+        model.nav = .person(sara.id)
+        shot("one-on-one", size: NSSize(width: 1080, height: 720), AnyView(OneOnOneView(person: model.person(sara.id) ?? sara, onEnd: {})))
         model.nav = .person(sara.id)
         shot("person", size: NSSize(width: 1080, height: 700), main)
         model.nav = .ledger
@@ -59,6 +69,8 @@ enum Screenshots {
              AnyView(CaptureView(onClose: {}, preset: "owe @sara review RFC fri #rfc !")))
         shot("capture-said", size: NSSize(width: 700, height: 300), bg: wall,
              AnyView(CaptureView(onClose: {}, preset: "said @amir \"ship date is firm for Nov 20\"")))
+        shot("shortcuts", size: NSSize(width: 760, height: 520), bg: wall, AnyView(ShortcutsView()))
+        shot("welcome", size: NSSize(width: 640, height: 520), bg: wall, AnyView(WelcomeView()))
         shot("menubar-popover", size: NSSize(width: 400, height: 460), AnyView(PopoverView()))
         shot("morning-brief", size: NSSize(width: 640, height: 600), AnyView(MorningBriefView()))
         shot("settings-general", size: NSSize(width: 560, height: 460), dark: false, AnyView(SettingsView(onHotkeyChange: { true }, initialTab: "general")))
@@ -118,6 +130,13 @@ enum Screenshots {
         add(.said, "Headcount revisit", sara, created: 12, quote: "We'll revisit headcount in November")
         add(.said, "Ship date", amir, created: 4, quote: "Ship date is firm for Nov 20")
         add(.note, "Sara prefers async updates", sara, created: 20)
+        // finished, dropped and snoozed items for the Done and Snoozed views
+        if let d = try? store.capture("owe @amir send the onboarding doc fri") { _ = try? store.complete(d.id) }
+        if let d = try? store.capture("wait @maya security review sign-off") { _ = try? store.complete(d.id) }
+        if let d = try? store.capture("todo renew the monitoring contract") { try? store.drop(d.id) }
+        if let d = try? store.capture("bring @sara conference budget") { try? store.snooze(d.id, until: Date().addingTimeInterval(3 * 86400)) }
+        if let d = try? store.capture("owe @jonas security audit summary") { try? store.snooze(d.id, until: Date().addingTimeInterval(26 * 3600)) }
+        var notes = sara; notes.notes = "Prefers async updates. Wants a staff promotion case ready for the Q1 cycle."; try? store.savePerson(notes)
         _ = jonas
     }
 }

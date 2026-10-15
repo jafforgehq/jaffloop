@@ -9,6 +9,8 @@ import JaffloopCore
 struct ItemKeys: ViewModifier {
     @EnvironmentObject var model: AppModel
     let items: [Item]
+    /// Extra single-letter keys for a screen (Inbox triage). Return true when the key was used.
+    var triage: ((String, Item) -> Bool)?
     @FocusState private var focused: Bool
 
     func body(content: Content) -> some View {
@@ -61,6 +63,9 @@ struct ItemKeys: ViewModifier {
             return .ignored
         default: break
         }
+
+        if p.characters == "?" { withAnimation(Motion.ease(0.2)) { model.showShortcuts.toggle() }; return .handled }
+        if let triage, let sel, triage(p.characters, sel) { return .handled }
 
         switch p.characters {
         case "j": move(1)
@@ -136,57 +141,122 @@ struct BulkBar: View {
     }
 }
 
-// MARK: - Details drawer
+// MARK: - Details drawer (every field is editable)
 
 struct ItemDrawer: View {
     @EnvironmentObject var model: AppModel
     let item: Item
+    @State private var title: String
+    @State private var bodyText: String
+    @State private var tagText = ""
+    @State private var showDue = false
+    @FocusState private var bodyFocus: Bool
+    @FocusState private var titleFocus: Bool
+
+    init(item: Item) {
+        self.item = item
+        _title = State(initialValue: item.title)
+        _bodyText = State(initialValue: item.body ?? "")
+    }
 
     var body: some View {
         let person = model.person(item.personId)
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                KindLabel(kind: item.kind)
-                if item.status != .open { Text(item.status.rawValue).font(Theme.mono).foregroundStyle(Theme.text2) }
-                Spacer()
-                Button { withAnimation(Motion.spring()) { model.drawerItemId = nil } } label: {
-                    Image(systemName: "xmark").font(.system(size: 10)).foregroundStyle(Theme.text2).frame(width: 22, height: 22)
-                }.buttonStyle(.plain).help("Close  esc").accessibilityLabel("Close details")
-            }
-            Text(item.title).font(Theme.title(19)).foregroundStyle(Theme.text).fixedSize(horizontal: false, vertical: true)
-            if let q = item.quote, !q.isEmpty {
-                Text("\u{201C}\(q)\u{201D}").font(.system(size: 13, design: .serif)).italic().foregroundStyle(Theme.text)
-            }
-            if let b = item.body, !b.isEmpty { Text(b).font(.system(size: 12.5)).foregroundStyle(Theme.text2).fixedSize(horizontal: false, vertical: true) }
-            Rectangle().fill(Theme.hairline).frame(height: 0.5)
-            VStack(alignment: .leading, spacing: 9) {
-                if let person { field("Person") { HStack(spacing: 6) { Avatar(person: person, size: 16); Text(person.name) } } }
-                if let d = Fmt.exact(item) { field("Due") { Text(d).foregroundStyle(Rules.isOverdue(item, now: Date()) ? Theme.clay : Theme.text) } }
-                if let r = item.remindAt { field("Reminder") { Text(Fmt.short(r, "EEE d MMM HH:mm")) } }
-                if let rule = item.recurRule, !rule.isEmpty { field("Repeats") { Text(rule.replacingOccurrences(of: "FREQ=", with: "").lowercased()) } }
-                field("Created") { Text(Fmt.short(item.createdAt, "d MMM yyyy")) }
-                field("Last touched") { Text(Fmt.short(item.lastTouchedAt, "d MMM yyyy")) }
-                if item.snoozeCount > 0 { field("Snoozed") { Text("\(item.snoozeCount) time\(item.snoozeCount == 1 ? "" : "s")").foregroundStyle(Rules.isSlipping(item) ? Theme.clay : Theme.text) } }
-                field("Source") { Text(item.source.rawValue) }
-                let tags = model.tagsOf(item.id)
-                if !tags.isEmpty { field("Tags") { HStack(spacing: 5) { ForEach(tags, id: \.self) { t in Chip { Text("#\(t)") } } } } }
-            }
-            Spacer(minLength: 0)
-            if item.status == .open {
-                HStack(spacing: 8) {
-                    PrimaryButton(title: "Complete") { model.complete(item) }
-                    Menu("Snooze") {
-                        ForEach(model.snoozePresets()) { p in Button(p.label) { model.snooze(item, until: p.date) } }
-                    }.menuStyle(.borderlessButton).fixedSize().font(.system(size: 12.5))
-                    QuietButton(title: item.pinned ? "Unpin" : "Pin") { model.togglePin(item) }
-                    QuietButton(title: "Drop") { model.drop(item) }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Menu {
+                        ForEach(ItemKind.allCases, id: \.self) { k in
+                            Button(k.rawValue) { model.update(item, "Now \(k.rawValue)") { $0.kind = k } }
+                        }
+                    } label: { HStack(spacing: 4) { KindLabel(kind: item.kind); Image(systemName: "chevron.down").font(.system(size: 8)).foregroundStyle(Theme.text2) } }
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("Kind: \(item.kind.rawValue). Change")
+                    if item.status != .open { Text(item.status.rawValue).font(Theme.mono).foregroundStyle(Theme.text2) }
+                    Spacer()
+                    Button { withAnimation(Motion.spring()) { model.drawerItemId = nil } } label: {
+                        Image(systemName: "xmark").font(.system(size: 10)).foregroundStyle(Theme.text2).frame(width: 22, height: 22)
+                    }.buttonStyle(.plain).help("Close  esc").accessibilityLabel("Close details")
+                }
+                TextField("Title", text: $title, axis: .vertical).textFieldStyle(.plain).font(Theme.title(19)).foregroundStyle(Theme.text)
+                    .focused($titleFocus).onSubmit { commitTitle() }
+                    .onChange(of: titleFocus) { _, f in if !f { commitTitle() } }
+                if let q = item.quote, !q.isEmpty {
+                    Text("\u{201C}\(q)\u{201D}").font(.system(size: 13, design: .serif)).italic().foregroundStyle(Theme.text)
+                }
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $bodyText).font(.system(size: 12.5)).scrollContentBackground(.hidden).focused($bodyFocus)
+                        .frame(minHeight: 64, maxHeight: 140).padding(5)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.elevated))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(bodyFocus ? Theme.accent : Theme.hairline, lineWidth: bodyFocus ? 1.2 : 0.5))
+                    if bodyText.isEmpty { Text("Add details").font(.system(size: 12.5)).foregroundStyle(Theme.text2).padding(.horizontal, 11).padding(.vertical, 13).allowsHitTesting(false) }
+                }
+                .onChange(of: bodyFocus) { _, f in if !f { commitBody() } }
+                Rectangle().fill(Theme.hairline).frame(height: 0.5)
+                VStack(alignment: .leading, spacing: 9) {
+                    field("Person") {
+                        Menu {
+                            Button("No one") { model.update(item, "Person removed") { $0.personId = nil } }
+                            ForEach(model.orderedPeople) { s in Button(s.person.name) { model.update(item, "Assigned to \(s.person.name)") { $0.personId = s.person.id } } }
+                        } label: {
+                            HStack(spacing: 6) {
+                                if let person { Avatar(person: person, size: 16); Text(person.name) } else { Text("No one").foregroundStyle(Theme.text2) }
+                                Image(systemName: "chevron.down").font(.system(size: 8)).foregroundStyle(Theme.text2)
+                            }
+                        }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    }
+                    field("Due") {
+                        Button { showDue = true } label: {
+                            HStack(spacing: 6) {
+                                Text(Fmt.exact(item) ?? "Set a date").foregroundStyle(Fmt.exact(item) == nil ? Theme.text2 : (Rules.isOverdue(item, now: Date()) ? Theme.clay : Theme.text))
+                                Image(systemName: "calendar").font(.system(size: 10)).foregroundStyle(Theme.text2)
+                            }.modifier(FocusRing(radius: 4))
+                        }.buttonStyle(.plain)
+                        .popover(isPresented: $showDue) {
+                            DueEditor(current: item.dueAt, hasTime: item.dueHasTime) { d, t in
+                                showDue = false
+                                model.update(item, d == nil ? "Due date cleared" : "Due date changed") { $0.dueAt = d; $0.dueHasTime = t }
+                            }
+                        }
+                    }
+                    if let r = item.remindAt { field("Reminder") { Text(Fmt.short(r, "EEE d MMM HH:mm")) } }
+                    if let rule = item.recurRule, !rule.isEmpty { field("Repeats") { Text(RecurrenceText.describe(rule)) } }
+                    field("Created") { Text(Fmt.short(item.createdAt, "d MMM yyyy")) }
+                    field("Last touched") { Text(Fmt.short(item.lastTouchedAt, "d MMM yyyy")) }
+                    if item.snoozeCount > 0 { field("Snoozed") { Text("\(item.snoozeCount) time\(item.snoozeCount == 1 ? "" : "s")").foregroundStyle(Rules.isSlipping(item) ? Theme.clay : Theme.text) } }
+                    field("Source") { Text(item.source.rawValue) }
+                    field("Tags") {
+                        TextField("tag, tag", text: $tagText).textFieldStyle(.plain).onSubmit { commitTags() }
+                    }
+                }
+                if item.status == .open {
+                    HStack(spacing: 8) {
+                        PrimaryButton(title: "Complete") { model.complete(item) }
+                        Menu("Snooze") {
+                            ForEach(model.snoozePresets()) { p in Button(p.label) { model.snooze(item, until: p.date) } }
+                        }.menuStyle(.borderlessButton).fixedSize().font(.system(size: 12.5))
+                        QuietButton(title: item.pinned ? "Unpin" : "Pin") { model.togglePin(item) }
+                        QuietButton(title: "Drop") { model.drop(item) }
+                    }.padding(.top, 4)
+                } else {
+                    QuietButton(title: "Reopen") { model.reopen(item) }
                 }
             }
+            .padding(18)
         }
-        .padding(18)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.surface)
+        .onAppear { tagText = model.tagsOf(item.id).joined(separator: ", ") }
+        .onDisappear { commitTitle(); commitBody(); commitTags() }
     }
+
+    private func commitTitle() {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty { title = item.title } else if t != item.title { model.rename(item, t) }
+    }
+    private func commitBody() {
+        let t = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard t != (item.body ?? "") else { return }
+        model.update(item, "Details updated") { $0.body = t.isEmpty ? nil : t }
+    }
+    private func commitTags() { model.setTags(item, tagText.split(separator: ",").map(String.init)) }
 
     func field<V: View>(_ label: String, @ViewBuilder _ value: () -> V) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -194,6 +264,5 @@ struct ItemDrawer: View {
             value().font(.system(size: 12.5)).foregroundStyle(Theme.text)
             Spacer(minLength: 0)
         }
-        .accessibilityElement(children: .combine)
     }
 }

@@ -85,17 +85,20 @@ public struct Person: Codable, FetchableRecord, PersistableRecord, Identifiable,
     public var matchEmails: String
     public var hiddenFromClaude: Bool
     public var archived: Bool
+    /// Free-form private notes (preferences, goals). Not exposed over MCP.
+    public var notes: String
 
     public init(id: String = UUID().uuidString, handle: String, name: String, relation: Relation = .other,
-                cadenceDays: Int? = nil, matchEmails: String = "", hiddenFromClaude: Bool = false, archived: Bool = false) {
+                cadenceDays: Int? = nil, matchEmails: String = "", hiddenFromClaude: Bool = false, archived: Bool = false,
+                notes: String = "") {
         self.id = id; self.handle = handle; self.name = name; self.relation = relation
         self.cadenceDays = cadenceDays; self.matchEmails = matchEmails
-        self.hiddenFromClaude = hiddenFromClaude; self.archived = archived
+        self.hiddenFromClaude = hiddenFromClaude; self.archived = archived; self.notes = notes
     }
 
     enum CodingKeys: String, CodingKey {
         case id, handle, name, relation, cadenceDays = "cadence_days", matchEmails = "match_emails"
-        case hiddenFromClaude = "hidden_from_claude", archived
+        case hiddenFromClaude = "hidden_from_claude", archived, notes
     }
 
     public var initials: String {

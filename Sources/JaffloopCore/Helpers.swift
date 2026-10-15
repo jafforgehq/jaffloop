@@ -71,3 +71,75 @@ public enum ItemAge {
         return d >= minDays ? d : nil
     }
 }
+
+public extension ItemAge {
+    /// 0 = fresh, 1 = a week or more, 2 = two weeks or more. Drives the badge colour.
+    static func level(days: Int) -> Int { days >= 14 ? 2 : (days >= 7 ? 1 : 0) }
+}
+
+public enum RecurrenceText {
+    /// Human wording for the stored recurrence rule ("FREQ=WEEKLY;BYDAY=MO" -> "every Mon").
+    public static func describe(_ r: String) -> String {
+        if r.contains("BYDAY=MO,TU,WE,TH,FR") { return "weekdays" }
+        let days = ["MO": "Mon", "TU": "Tue", "WE": "Wed", "TH": "Thu", "FR": "Fri", "SA": "Sat", "SU": "Sun"]
+        if let d = r.components(separatedBy: "BYDAY=").last, r.contains("BYDAY"), let n = days[d] { return "every \(n)" }
+        if r.contains("INTERVAL="), let n = r.components(separatedBy: "INTERVAL=").last?.components(separatedBy: ";").first {
+            return "every \(n) \(r.contains("WEEKLY") ? "weeks" : r.contains("MONTHLY") ? "months" : "days")"
+        }
+        return r.contains("MONTHLY") ? "monthly" : r.contains("DAILY") ? "daily" : "weekly"
+    }
+}
+
+public enum QueryTerms {
+    /// The plain words of a search query, without filters like @person, kind:owe, before:2026-11-01.
+    public static func words(_ q: String) -> [String] {
+        q.split(separator: " ").map(String.init).filter { w in
+            !w.hasPrefix("@") && !w.contains(":") && w.count > 1
+        }.map { $0.lowercased() }
+    }
+}
+
+/// Back and forward through visited screens.
+public struct NavHistory<T: Equatable> {
+    public private(set) var back: [T] = []
+    public private(set) var forward: [T] = []
+    public init() {}
+    public var canGoBack: Bool { !back.isEmpty }
+    public var canGoForward: Bool { !forward.isEmpty }
+
+    public mutating func visit(from old: T, to new: T) {
+        guard old != new else { return }
+        back.append(old); forward.removeAll()
+        if back.count > 50 { back.removeFirst() }
+    }
+    public mutating func goBack(from current: T) -> T? {
+        guard let p = back.popLast() else { return nil }
+        forward.append(current); return p
+    }
+    public mutating func goForward(from current: T) -> T? {
+        guard let n = forward.popLast() else { return nil }
+        back.append(current); return n
+    }
+}
+
+public enum PinOrder {
+    /// Pinned items first, in the saved order (unknown ones keep their place after the known ones); the rest unchanged.
+    public static func apply(_ items: [Item], order: [String]) -> [Item] {
+        let pinned = items.filter { $0.pinned }
+        let rest = items.filter { !$0.pinned }
+        let rank = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
+        let sorted = pinned.enumerated().sorted { a, b in
+            let ra = rank[a.element.id] ?? Int.max, rb = rank[b.element.id] ?? Int.max
+            return ra != rb ? ra < rb : a.offset < b.offset
+        }.map { $0.element }
+        return sorted + rest
+    }
+
+    /// New saved order after dragging `id` onto `target`: it takes the target's place.
+    public static func move(_ id: String, onto target: String, in current: [String]) -> [String] {
+        guard id != target else { return current }
+        var o = current.filter { $0 != id }
+        if let i = o.firstIndex(of: target) { o.insert(id, at: i) } else { o.append(id) }
+        return o
+    }
+}

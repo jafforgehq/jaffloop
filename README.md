@@ -14,7 +14,9 @@ Capture in one line. Everything stays on your Mac. Claude can read and write you
 - **Person pages** with a cadence ring, last 1:1, and four sections: I owe them, They owe me, Bring up, Said log.
 - **Promise ledger**, **Inbox triage by keyboard**, **⌘K search** (FTS5, with `@person`, `kind:`, `before:` filters).
 - **Person brief** (prep before you talk) and a **morning brief** on weekdays. No calendar access: your calendar app already reminds you of meetings.
-- **Keyboard-first lists**, **undo** (⌘Z toast), a details drawer, inline title editing, multi-select with bulk actions, and drag-to-assign.
+- **Keyboard-first lists**, **undo** (⌘Z toast), an editable details drawer, inline title and date editing, multi-select with bulk actions, and drag-to-assign.
+- **Done** and **Snoozed** views, saved search filters, back and forward, and a hideable sidebar.
+- **1:1 mode** for the meeting itself, private notes per person, and people as a list or grid.
 - **Local notifications** with Done / Snooze actions, quiet hours, and batching.
 - **What's new and roadmap** inside the app, shown once after you update. See also [`docs/CHANGELOG.md`](docs/CHANGELOG.md) and [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - **MCP server** (`jaffloop-mcp`) with 12 tools and 3 resources, a read-only mode, per-person hiding, and an audit log.
@@ -43,6 +45,18 @@ Capture in one line. Everything stays on your Mac. Claude can read and write you
 | --- |
 | ![General settings](docs/screenshots/settings-general.png) |
 
+| 1:1 mode | People as a grid |
+| --- | --- |
+| ![1:1 mode](docs/screenshots/one-on-one.png) | ![People grid](docs/screenshots/people-grid.png) |
+
+| Done | Snoozed |
+| --- | --- |
+| ![Done](docs/screenshots/done.png) | ![Snoozed](docs/screenshots/snoozed.png) |
+
+| Keyboard shortcuts (press ?) | First run |
+| --- | --- |
+| ![Shortcuts](docs/screenshots/shortcuts.png) | ![Welcome](docs/screenshots/welcome.png) |
+
 ## Keyboard
 
 In any list (Today, Ledger, person pages, tags):
@@ -59,7 +73,10 @@ In any list (Today, Ledger, person pages, tags):
 | `⌫` | Drop |
 | `esc` | Clear marks, close the drawer, clear the selection |
 | `⌘Z` | Undo, while the toast is showing |
-| `⌘K` | Search |
+| `⌘K` | Search (and save a search as a sidebar filter) |
+| `?` | Show every shortcut |
+| `⌘[` `⌘]` | Back and forward |
+| `⌘\` | Hide or show the sidebar |
 
 ## Capture syntax
 
@@ -82,14 +99,14 @@ Dates: `today`, `tomorrow`, weekdays, `next mon`, `15 nov`, `in 2h`, `eod`, `eow
 
 Requires macOS 14 or later on Apple Silicon.
 
-1. Download `Jaffloop-0.0.3.zip` from [Releases](../../releases) and unzip it.
+1. Download `Jaffloop-0.0.4.zip` from [Releases](../../releases) and unzip it.
 2. Move `Jaffloop.app` to `/Applications`.
 3. Open it. See [Signing](#signing-and-notarization) if macOS says it cannot verify the app.
 
-Verify the download against `Jaffloop-0.0.3.zip.sha256`:
+Verify the download against `Jaffloop-0.0.4.zip.sha256`:
 
 ```sh
-shasum -a 256 -c Jaffloop-0.0.3.zip.sha256
+shasum -a 256 -c Jaffloop-0.0.4.zip.sha256
 ```
 
 ## Updating
@@ -156,7 +173,7 @@ codesign --verify --deep --strict /Applications/Jaffloop.app
 spctl --assess --type execute --verbose /Applications/Jaffloop.app   # "accepted, source=Notarized Developer ID"
 ```
 
-**Release status:** the v0.0.3 zip on GitHub is Developer ID signed with the hardened runtime and **notarized and stapled by Apple**, so it opens on first launch without a Gatekeeper warning. The v0.0.1 zip was signed but not notarized.
+**Release status:** the v0.0.4 zip on GitHub is Developer ID signed with the hardened runtime and **notarized and stapled by Apple**, so it opens on first launch without a Gatekeeper warning. The v0.0.1 zip was signed but not notarized.
 
 ## Not in v1
 

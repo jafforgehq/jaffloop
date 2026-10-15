@@ -25,7 +25,8 @@ enum Theme {
     static let text = Color(dark: 0xEDEBE6, light: 0x1C1B19)
     static let text2 = Color(dark: 0x96938C, light: 0x6B6860)
     static let hairline = Color(nsColor: NSColor(name: nil) { a in
-        a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 1, alpha: 0.075) : NSColor(white: 0, alpha: 0.09)
+        let hc = a.name.rawValue.contains("HighContrast") || NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        return a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 1, alpha: hc ? 0.3 : 0.075) : NSColor(white: 0, alpha: hc ? 0.35 : 0.09)
     })
     static let hover = Color(nsColor: NSColor(name: nil) { a in
         a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 1, alpha: 0.05) : NSColor(white: 0, alpha: 0.04)

@@ -294,6 +294,7 @@ struct ItemRow: View {
     @State private var appeared = false
     @State private var editing = false
     @State private var draft = ""
+    @State private var showDue = false
     @FocusState private var editFocus: Bool
 
     private var density: Density { compact ? .compact : (densityOverride ?? model.density) }
@@ -355,9 +356,15 @@ struct ItemRow: View {
 
             Spacer(minLength: 8)
 
+            if let rule = item.recurRule, !rule.isEmpty {
+                Image(systemName: "repeat").font(.system(size: 10)).foregroundStyle(Theme.text2)
+                    .help("Repeats: \(RecurrenceText.describe(rule))").accessibilityLabel("Repeats \(RecurrenceText.describe(rule))")
+            }
             if !compact, let n = ItemAge.badge(item, now: Date()) {
-                Text("\(n)d").font(Theme.mono).foregroundStyle(n >= 10 ? Theme.clay : Theme.text2)
-                    .help("Open for \(n) days, since \(Fmt.short(item.createdAt, "EEEE d MMMM"))")
+                let stale = Rules.isStaleWait(item, now: Date(), settings: model.settings)
+                Text("\(n)d").font(Theme.mono).underline(stale, color: Theme.clay)
+                    .foregroundStyle([Theme.text2, Theme.kind(.owe), Theme.clay][ItemAge.level(days: n)])
+                    .help(stale ? "Stale: waiting longer than your limit. Open \(n) days." : "Open for \(n) days, since \(Fmt.short(item.createdAt, "EEEE d MMMM"))")
             }
             if item.pinned { Image(systemName: "pin.fill").font(.system(size: 9)).foregroundStyle(Theme.text2) }
             if slipping {
@@ -386,11 +393,28 @@ struct ItemRow: View {
                 }.frame(width: compact ? Col.person - 14 : Col.person, alignment: .leading)
             }
             let due = Fmt.due(item)
-            Text(due ?? "").font(Theme.date).foregroundStyle(overdue ? Theme.clay : Theme.text2)
-                .lineLimit(1).minimumScaleFactor(0.8)
+            Button { showDue = true } label: {
+                Group {
+                    if let due {
+                        Text(due).font(Theme.date).foregroundStyle(overdue ? Theme.clay : Theme.text2).lineLimit(1).minimumScaleFactor(0.8)
+                    } else {
+                        Image(systemName: "calendar.badge.plus").font(.system(size: 11)).foregroundStyle(Theme.text2)
+                            .opacity(hovering && !compact ? 1 : 0)
+                    }
+                }
                 .frame(width: compact ? Col.date - 22 : Col.date, alignment: .trailing)
-                .help(Fmt.exact(item) ?? "")
-                .accessibilityLabel(due.map { overdue ? "Overdue, \($0)" : "Due \($0)" } ?? "No due date")
+                .contentShape(Rectangle())
+                .modifier(FocusRing(radius: 4))
+            }
+            .buttonStyle(.plain)
+            .help(Fmt.exact(item).map { "\($0) (click to change)" } ?? "Set a due date")
+            .accessibilityLabel(due.map { overdue ? "Overdue, \($0). Change date" : "Due \($0). Change date" } ?? "Set a due date")
+            .popover(isPresented: $showDue) {
+                DueEditor(current: item.dueAt, hasTime: item.dueHasTime) { d, t in
+                    showDue = false
+                    model.update(item, d == nil ? "Due date cleared" : "Due date changed") { $0.dueAt = d; $0.dueHasTime = t }
+                }
+            }
         }
         .offset(x: ghost != nil && !Motion.reduced ? 36 : 0)
         .padding(.horizontal, 8)
@@ -410,6 +434,13 @@ struct ItemRow: View {
             else { model.multi = []; model.selectedItemId = item.id }
         }
         .draggable(model.dragPayload(for: item.id))
+        .dropDestination(for: String.self) { payloads, _ in
+            // Dropping one pinned item onto another reorders the pins.
+            guard item.pinned, payloads.count == 1, payloads[0] != item.id, !payloads[0].contains(","),
+                  model.openItems.first(where: { $0.id == payloads[0] })?.pinned == true else { return false }
+            model.movePin(payloads[0], onto: item.id)
+            return true
+        }
         .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu {
             Button("Complete") { finish() }

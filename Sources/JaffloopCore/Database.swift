@@ -101,6 +101,9 @@ var migrator: DatabaseMigrator {
             t.column("quote")
         }
     }
+    m.registerMigration("v2-person-notes") { db in
+        try db.alter(table: "people") { t in t.add(column: "notes", .text).notNull().defaults(to: "") }
+    }
     return m
 }
 

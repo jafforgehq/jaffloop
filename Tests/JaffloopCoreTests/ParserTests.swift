@@ -279,3 +279,56 @@ final class HelperTests: XCTestCase {
         try store.restore(before); XCTAssertEqual(try store.item(i.id)!.snoozeCount, 0)
     }
 }
+
+
+final class MoreHelperTests: XCTestCase {
+    func testHistoryAndSnoozed() throws {
+        let store = Store(try openInMemoryDatabase())
+        let a = try store.capture("owe @sara a fri"), b = try store.capture("owe @sara b fri"), c = try store.capture("owe @sara c fri")
+        _ = try store.complete(a.id); try store.drop(b.id)
+        try store.snooze(c.id, until: Date().addingTimeInterval(7200))
+        XCTAssertEqual(Set(try store.history(since: nil).map { $0.id }), [a.id, b.id])
+        XCTAssertEqual(try store.history(since: Date().addingTimeInterval(86400)).count, 0)
+        XCTAssertEqual(try store.snoozed().map { $0.id }, [c.id])
+        try store.update(c.id) { $0.snoozedUntil = nil }
+        XCTAssertTrue(try store.snoozed().isEmpty)
+    }
+    func testPersonNotesPersist() throws {
+        let store = Store(try openInMemoryDatabase())
+        try store.capture("owe @sara x")
+        var p = try store.person(handle: "sara")!
+        XCTAssertEqual(p.notes, "")
+        p.notes = "Prefers async. Wants a staff promo in 2027."; try store.savePerson(p)
+        XCTAssertEqual(try store.person(handle: "sara")!.notes, "Prefers async. Wants a staff promo in 2027.")
+    }
+    func testRecurrenceText() {
+        XCTAssertEqual(RecurrenceText.describe("FREQ=WEEKLY;BYDAY=MO"), "every Mon")
+        XCTAssertEqual(RecurrenceText.describe("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"), "weekdays")
+        XCTAssertEqual(RecurrenceText.describe("FREQ=MONTHLY"), "monthly")
+        XCTAssertEqual(RecurrenceText.describe("FREQ=WEEKLY;INTERVAL=2"), "every 2 weeks")
+    }
+    func testAgeLevelAndQueryTerms() {
+        XCTAssertEqual([ItemAge.level(days: 3), ItemAge.level(days: 7), ItemAge.level(days: 14)], [0, 1, 2])
+        XCTAssertEqual(QueryTerms.words("@sara kind:owe review RFC before:2026-11-01 x"), ["review", "rfc"])
+    }
+    func testNavHistory() {
+        var h = NavHistory<String>()
+        h.visit(from: "today", to: "ledger"); h.visit(from: "ledger", to: "inbox")
+        XCTAssertEqual(h.goBack(from: "inbox"), "ledger")
+        XCTAssertEqual(h.goBack(from: "ledger"), "today")
+        XCTAssertNil(h.goBack(from: "today"))
+        XCTAssertEqual(h.goForward(from: "today"), "ledger")
+        h.visit(from: "ledger", to: "people")
+        XCTAssertFalse(h.canGoForward, "a new visit clears forward")
+        h.visit(from: "people", to: "people")
+        XCTAssertEqual(h.back, ["today", "ledger"])
+    }
+    func testPinOrder() {
+        func item(_ t: String, pinned: Bool) -> Item { var i = Item(kind: .task, title: t); i.pinned = pinned; i.id = t; return i }
+        let items = [item("a", pinned: true), item("b", pinned: false), item("c", pinned: true), item("d", pinned: true)]
+        XCTAssertEqual(PinOrder.apply(items, order: ["d", "a"]).map { $0.id }, ["d", "a", "c", "b"])
+        XCTAssertEqual(PinOrder.apply(items, order: []).map { $0.id }, ["a", "c", "d", "b"])
+        XCTAssertEqual(PinOrder.move("d", onto: "a", in: ["a", "c", "d"]), ["d", "a", "c"])
+        XCTAssertEqual(PinOrder.move("a", onto: "a", in: ["a", "c"]), ["a", "c"])
+    }
+}

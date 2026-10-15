@@ -238,6 +238,23 @@ public final class Store {
         }
     }
 
+    /// Finished or dropped items, newest first.
+    public func history(since: Date?, limit: Int = 500) throws -> [Item] {
+        try db.read { db in
+            var r = Item.filter(Column("status") != "open")
+            if let since { r = r.filter(Column("updated_at") >= since) }
+            return try r.order(Column("updated_at").desc).limit(limit).fetchAll(db)
+        }
+    }
+
+    /// Open items hidden until a later time, soonest wake-up first.
+    public func snoozed(now: Date = Date()) throws -> [Item] {
+        try db.read { db in
+            try Item.filter(Column("status") == "open").filter(Column("snoozed_until") != nil && Column("snoozed_until") > now)
+                .order(Column("snoozed_until").asc).fetchAll(db)
+        }
+    }
+
     /// Writes an earlier copy of an item back unchanged (undo). Keeps its original timestamps.
     public func restore(_ item: Item) throws { try db.write { try item.update($0) } }
 

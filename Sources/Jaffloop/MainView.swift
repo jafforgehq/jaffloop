@@ -8,8 +8,10 @@ struct MainView: View {
     var body: some View {
         ZStack {
             HStack(spacing: 0) {
-                Sidebar().frame(width: 230)
-                Rectangle().fill(Theme.hairline).frame(width: 0.5)
+                if !model.sidebarHidden {
+                    Sidebar().frame(width: 230).transition(.move(edge: .leading).combined(with: .opacity))
+                    Rectangle().fill(Theme.hairline).frame(width: 0.5)
+                }
                 Group {
                     switch model.nav {
                     case .today: TodayView()
@@ -17,6 +19,9 @@ struct MainView: View {
                     case .inbox: InboxView()
                     case .people: PeopleView()
                     case .releases: ReleasesView()
+                    case .done: DoneView()
+                    case .snoozed: SnoozedView()
+                    case .filter(let q): FilterView(query: q).id(q)
                     case .person(let id): PersonView(personId: id).id(id)
                     case .tag(let t): TagView(tag: t)
                     }
@@ -25,7 +30,14 @@ struct MainView: View {
                 .background(Theme.bg)
                 if let it = model.drawerItem {
                     Rectangle().fill(Theme.hairline).frame(width: 0.5)
-                    ItemDrawer(item: it).frame(width: 300).transition(.move(edge: .trailing).combined(with: .opacity))
+                    ItemDrawer(item: it).id(it.id).frame(width: 300).transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if model.sidebarHidden {
+                    Button { model.toggleSidebar() } label: {
+                        Image(systemName: "sidebar.left").font(.system(size: 13)).foregroundStyle(Theme.text2).frame(width: 28, height: 24).modifier(FocusRing(radius: 6))
+                    }.buttonStyle(.plain).padding(.leading, 84).padding(.top, 7).help("Show sidebar  ⌘\\").accessibilityLabel("Show sidebar")
                 }
             }
             if model.showSearch {
@@ -33,10 +45,21 @@ struct MainView: View {
                     .transition(.opacity)
                 SearchPalette().transition(.scale(scale: 0.97).combined(with: .opacity))
             }
+            if model.showShortcuts {
+                Color.black.opacity(0.28).ignoresSafeArea().onTapGesture { withAnimation(Motion.ease(0.2)) { model.showShortcuts = false } }
+                    .transition(.opacity)
+                ShortcutsView().transition(.scale(scale: 0.97).combined(with: .opacity))
+            }
+            if model.showWelcome {
+                Color.black.opacity(0.4).ignoresSafeArea().transition(.opacity)
+                WelcomeView().transition(.scale(scale: 0.97).combined(with: .opacity))
+            }
             VStack(spacing: 8) { Spacer(); ToastBar(); BulkBar() }.padding(.bottom, 20)
         }
         .animation(Motion.spring(), value: model.showSearch)
+        .animation(Motion.spring(), value: model.showShortcuts)
         .animation(Motion.spring(), value: model.drawerItemId)
+        .animation(Motion.spring(), value: model.sidebarHidden)
         .animation(Motion.spring(), value: model.multi.isEmpty)
         .background(Theme.bg)
         .tint(Theme.accent)
@@ -70,6 +93,8 @@ struct Sidebar: View {
                 NavItem(icon: "scroll", title: "Ledger", nav: .ledger, count: model.ledgerItems.count, tip: "Open promises you made")
                 NavItem(icon: "tray", title: "Inbox", nav: .inbox, count: model.inboxItems.count, tip: "Captures to triage")
                 NavItem(icon: "person.2", title: "People", nav: .people, count: nil)
+                NavItem(icon: "moon.zzz", title: "Snoozed", nav: .snoozed, count: (try? model.store.snoozed().count) ?? 0, tip: "Hidden until later")
+                NavItem(icon: "checkmark.circle", title: "Done", nav: .done, count: nil)
             }.padding(.horizontal, 8)
 
             ScrollViewReader { proxy in
@@ -78,6 +103,18 @@ struct Sidebar: View {
                         Text("PEOPLE").font(Theme.caps).tracking(0.8).foregroundStyle(Theme.text2)
                             .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 4)
                         ForEach(model.orderedPeople) { s in PersonNavRow(summary: s).id(s.person.id) }
+                        if !model.savedFilters.isEmpty {
+                            Text("FILTERS").font(Theme.caps).tracking(0.8).foregroundStyle(Theme.text2)
+                                .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 4)
+                            ForEach(model.savedFilters, id: \.self) { q in
+                                NavRow(selected: model.nav == .filter(q), action: { model.nav = .filter(q) }) {
+                                    Image(systemName: "magnifyingglass").font(.system(size: 10)).frame(width: 18)
+                                    Text(q).lineLimit(1)
+                                    Spacer()
+                                    Text("\(model.filterItems(q).count)").font(.system(size: 11.5).monospacedDigit())
+                                }.contextMenu { Button("Remove filter", role: .destructive) { model.removeFilter(q) } }
+                            }
+                        }
                         if !model.tags.isEmpty {
                             let hidden = model.collapsed.contains("sidebar.tags")
                             Button { withAnimation(Motion.ease(0.2)) { model.toggleCollapsed("sidebar.tags") } } label: {
@@ -114,7 +151,7 @@ struct Sidebar: View {
                 UpdateBadge(updates: model.updates)
             }.foregroundStyle(Theme.text2).padding(.horizontal, 18).padding(.vertical, 12)
         }
-        .background(model.snapshot ? AnyView(Theme.surface) : AnyView(VisualEffect(material: .sidebar)))
+        .background(model.snapshot || model.reduceTransparency ? AnyView(Theme.surface) : AnyView(VisualEffect(material: .sidebar)))
     }
 }
 
@@ -248,10 +285,11 @@ struct Page<Content: View>: View {
 struct ItemList: View {
     let items: [Item]
     var showPerson = true
+    var showKind = true
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { idx, i in
-                ItemRow(item: i, index: idx, showPerson: showPerson)
+                ItemRow(item: i, index: idx, showPerson: showPerson, showKind: showKind)
                     .transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .trailing))))
             }
         }
@@ -287,11 +325,11 @@ struct TodayView: View {
                 return it.isEmpty ? nil : Block(id: "k." + k.rawValue, title: k.rawValue, tint: Theme.kind(k), items: it)
             }
         default:
-            return [Block(id: "slipping", title: "Slipping", tint: Theme.clay, items: t.slipping),
-                    Block(id: "overdue", title: "Overdue", tint: Theme.clay, items: t.overdue),
-                    Block(id: "today", title: "Today", tint: Theme.text2, items: t.today),
-                    Block(id: "waiting", title: "Waiting on", tint: Theme.text2, items: t.waitingStale),
-                    Block(id: "inbox", title: "Inbox", tint: Theme.text2, items: t.inbox)].filter { !$0.items.isEmpty }
+            return [Block(id: "slipping", title: "Slipping", tint: Theme.clay, items: model.ordered(t.slipping)),
+                    Block(id: "overdue", title: "Overdue", tint: Theme.clay, items: model.ordered(t.overdue)),
+                    Block(id: "today", title: "Today", tint: Theme.text2, items: model.ordered(t.today)),
+                    Block(id: "waiting", title: "Waiting on", tint: Theme.text2, items: model.ordered(t.waitingStale)),
+                    Block(id: "inbox", title: "Inbox", tint: Theme.text2, items: model.ordered(t.inbox))].filter { !$0.items.isEmpty }
         }
     }
 
@@ -315,6 +353,13 @@ struct TodayView: View {
                     } else if !checkIns.isEmpty {
                         SectionHeader(title: "Check in", count: checkIns.count)
                         ForEach(checkIns) { s in CheckInRow(summary: s) }
+                    }
+                    let snoozedCount = (try? model.store.snoozed().count) ?? 0
+                    if snoozedCount > 0 {
+                        Button { model.nav = .snoozed } label: {
+                            HStack(spacing: 6) { Image(systemName: "moon.zzz").font(.system(size: 11)); Text("\(snoozedCount) snoozed").font(.system(size: 12.5)) }
+                                .foregroundStyle(Theme.text2).padding(.vertical, 8).padding(.horizontal, 8).modifier(FocusRing(radius: 5))
+                        }.buttonStyle(.plain).padding(.top, 14)
                     }
                 }
                 .animation(Motion.ease(0.22), value: model.openItems.map { $0.id })
@@ -413,9 +458,7 @@ struct LedgerView: View {
 
 struct InboxView: View {
     @EnvironmentObject var model: AppModel
-    @State private var selected = 0
     @State private var pickPerson = false
-    @FocusState private var focused: Bool
 
     var body: some View {
         let items = model.inboxItems
@@ -425,7 +468,7 @@ struct InboxView: View {
                 ForEach(Array(items.enumerated()), id: \.element.id) { idx, i in
                     VStack(alignment: .leading, spacing: 4) {
                         ItemRow(item: i, index: idx, showPerson: false)
-                        if idx == min(selected, items.count - 1) {
+                        if model.selectedItemId == i.id {
                             HStack(spacing: 8) {
                                 action("Person", "p") { pickPerson = true }
                                     .popover(isPresented: $pickPerson) { PersonPicker { h in pickPerson = false; model.assign(i, handle: h, due: nil) } }
@@ -436,28 +479,29 @@ struct InboxView: View {
                             }.padding(.leading, 34).padding(.bottom, 4)
                         }
                     }
-                    .onTapGesture { selected = idx }
                 }
             }
         }
-        .focusable().focused($focused).focusEffectDisabled()
-        .onAppear { focused = true }
-        .onKeyPress(.downArrow) { selected = min(selected + 1, max(0, model.inboxItems.count - 1)); return .handled }
-        .onKeyPress(.upArrow) { selected = max(selected - 1, 0); return .handled }
-        .onKeyPress { press in
-            let items = model.inboxItems
-            guard !items.isEmpty else { return .ignored }
-            let i = items[min(selected, items.count - 1)]
-            switch press.characters {
-            case "p": pickPerson = true
-            case "d": model.assign(i, handle: nil, due: Calendar.current.startOfDay(for: Date()))
-            case "t": model.assign(i, handle: nil, due: Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: Date())))
-            case "w": model.assign(i, handle: nil, due: nextMonday())
-            case "x": model.drop(i)
-            default: return .ignored
-            }
-            return .handled
+        // Same keys as every other list (j k ⏎ s e space), plus p d t w x for triage.
+        .modifier(ItemKeys(items: items, triage: { key, item in triage(key, item, items) }))
+        .onAppear { if !items.contains(where: { $0.id == model.selectedItemId }) { model.selectedItemId = items.first?.id } }
+    }
+
+    private func triage(_ key: String, _ i: Item, _ items: [Item]) -> Bool {
+        func moveOn() {
+            guard let idx = items.firstIndex(where: { $0.id == i.id }) else { return }
+            model.selectedItemId = idx + 1 < items.count ? items[idx + 1].id : (idx > 0 ? items[idx - 1].id : nil)
         }
+        let cal = Calendar.current, today = cal.startOfDay(for: Date())
+        switch key {
+        case "p": pickPerson = true
+        case "d": moveOn(); model.assign(i, handle: nil, due: today)
+        case "t": moveOn(); model.assign(i, handle: nil, due: cal.date(byAdding: .day, value: 1, to: today))
+        case "w": moveOn(); model.assign(i, handle: nil, due: nextMonday())
+        case "x": moveOn(); model.drop(i)
+        default: return false
+        }
+        return true
     }
 
     func nextMonday() -> Date? {
@@ -513,33 +557,82 @@ struct TagView: View {
 
 struct PeopleView: View {
     @EnvironmentObject var model: AppModel
+    @AppStorage("peopleLayout") private var layout = "list"       // list | grid
+    @AppStorage("peopleSort") private var sort = "name"           // name | urgency | last
     @State private var newName = ""
+
+    private var people: [PersonSummary] {
+        switch sort {
+        case "urgency": return model.orderedPeople
+        case "last": return model.summaries.sorted { ($0.daysSinceLast ?? Int.max) > ($1.daysSinceLast ?? Int.max) }
+        default: return model.summaries
+        }
+    }
 
     var body: some View {
         Page("People", subtitle: "\(model.summaries.count) tracked") {
-            HStack {
-                TextField("Add a person…", text: $newName).textFieldStyle(.roundedBorder).frame(width: 240).onSubmit(add)
+            HStack(spacing: 10) {
+                TextField("Add a person…", text: $newName).textFieldStyle(.roundedBorder).frame(width: 220).onSubmit(add)
                 GhostButton(title: "Add", action: add)
+                Spacer()
+                Picker("Sort", selection: $sort) { Text("Name").tag("name"); Text("Most overdue").tag("urgency"); Text("Longest since 1:1").tag("last") }
+                    .pickerStyle(.menu).frame(width: 160).labelsHidden().accessibilityLabel("Sort people")
+                Picker("Layout", selection: $layout) {
+                    Image(systemName: "list.bullet").tag("list").accessibilityLabel("List")
+                    Image(systemName: "square.grid.2x2").tag("grid").accessibilityLabel("Grid")
+                }.pickerStyle(.segmented).frame(width: 80).labelsHidden()
             }.padding(.top, 16)
             if model.summaries.isEmpty { AllClosed(title: "No one yet", message: "Add the people you meet with. Typing @name in a capture adds them too.") }
-            VStack(spacing: 0) {
-                ForEach(model.summaries) { s in
-                    Button { model.nav = .person(s.person.id) } label: {
-                        HStack(spacing: 12) {
-                            CadenceRing(person: s.person, daysSince: s.daysSinceLast, overdue: s.cadenceOverdue, size: 40)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(s.person.name).font(.system(size: 13.5, weight: .medium)).foregroundStyle(Theme.text)
-                                Text(s.person.relation.rawValue).font(Theme.mono).foregroundStyle(Theme.text2)
-                            }
-                            Spacer()
-                            Text(s.daysSinceLast.map { "last 1:1 \($0)d ago" } ?? "no 1:1 logged")
-                                .font(.system(size: 12)).foregroundStyle(s.cadenceOverdue ? Theme.clay : Theme.text2)
-                            Text("\(s.openOwe) owe · \(s.openWait) wait").font(Theme.mono).foregroundStyle(Theme.text2).frame(width: 100, alignment: .trailing)
-                        }.padding(.vertical, 8).padding(.horizontal, 8).contentShape(Rectangle())
-                    }.buttonStyle(.plain)
-                }
-            }.padding(.top, 12)
+            if layout == "grid" {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 12)], spacing: 12) {
+                    ForEach(people) { s in card(s) }
+                }.padding(.top, 14)
+            } else {
+                VStack(spacing: 0) { ForEach(people) { s in row(s) } }.padding(.top, 12)
+            }
         }
+    }
+
+    func row(_ s: PersonSummary) -> some View {
+        Button { model.nav = .person(s.person.id) } label: {
+            HStack(spacing: 12) {
+                CadenceRing(person: s.person, daysSince: s.daysSinceLast, overdue: s.cadenceOverdue, size: 40)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(s.person.name).font(.system(size: 13.5, weight: .medium)).foregroundStyle(Theme.text)
+                    Text(s.person.relation.rawValue).font(Theme.mono).foregroundStyle(Theme.text2)
+                }
+                Spacer()
+                Text(s.daysSinceLast.map { "last 1:1 \($0)d ago" } ?? "no 1:1 logged")
+                    .font(.system(size: 12)).foregroundStyle(s.cadenceOverdue ? Theme.clay : Theme.text2)
+                Text("\(s.openOwe) owe · \(s.openWait) wait").font(Theme.mono).foregroundStyle(Theme.text2).frame(width: 100, alignment: .trailing)
+            }.padding(.vertical, 8).padding(.horizontal, 8).contentShape(Rectangle()).modifier(FocusRing(radius: 8))
+        }.buttonStyle(.plain)
+    }
+
+    func card(_ s: PersonSummary) -> some View {
+        Button { model.nav = .person(s.person.id) } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    CadenceRing(person: s.person, daysSince: s.daysSinceLast, overdue: s.cadenceOverdue, size: 46)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(s.person.name).font(.system(size: 13.5, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1)
+                        Text(s.person.relation.rawValue).font(Theme.mono).foregroundStyle(Theme.text2)
+                    }
+                    Spacer(minLength: 0)
+                    if model.pinnedPeople.contains(s.person.id) { Image(systemName: "pin.fill").font(.system(size: 9)).foregroundStyle(Theme.text2) }
+                }
+                Text(s.daysSinceLast.map { $0 == 0 ? "1:1 today" : "last 1:1 \($0)d ago" } ?? "no 1:1 logged")
+                    .font(.system(size: 12)).foregroundStyle(s.cadenceOverdue ? Theme.clay : Theme.text2)
+                HStack(spacing: 6) {
+                    Chip { Circle().fill(Theme.kind(.owe)).frame(width: 6, height: 6); Text("\(s.openOwe) owe") }
+                    Chip { Circle().fill(Theme.kind(.wait)).frame(width: 6, height: 6); Text("\(s.openWait) wait") }
+                }
+            }
+            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.elevated))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.hairline, lineWidth: 0.5))
+            .modifier(FocusRing(radius: 12)).contentShape(Rectangle())
+        }.buttonStyle(.plain)
     }
 
     func add() {
@@ -555,10 +648,14 @@ struct PersonView: View {
     let personId: String
     @State private var edit = false
     @State private var quick = ""
+    @State private var oneOnOne = false
 
     var body: some View {
         if let s = model.summary(personId) {
             let p = s.person
+            if oneOnOne {
+                OneOnOneView(person: p, onEnd: { oneOnOne = false })
+            } else {
             VStack(spacing: 0) {
                 Page(p.name, subtitle: nil, header: { AnyView(header(s)) }) {
                     section("I owe them", .owe, empty: "Nothing promised.")
@@ -573,6 +670,7 @@ struct PersonView: View {
                 }
                 .modifier(ItemKeys(items: model.items(for: personId, kind: .owe) + model.items(for: personId, kind: .wait) + model.items(for: personId, kind: .bring)))
                 quickAdd(p)
+            }
             }
         } else {
             Text("Person not found").foregroundStyle(Theme.text2).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -591,7 +689,9 @@ struct PersonView: View {
                 }
                 HStack(spacing: 8) {
                     PrimaryButton(title: "Log 1:1") { model.logInteraction(p) }
+                    GhostButton(title: "Start 1:1") { withAnimation(Motion.ease(0.25)) { oneOnOne = true } }
                     Menu {
+                        Button("Start 1:1 mode") { withAnimation(Motion.ease(0.25)) { oneOnOne = true } }
                         Button("Prep brief") { model.openPersonBrief(p) }
                         Button("Edit person…") { edit = true }
                     } label: {
@@ -604,6 +704,7 @@ struct PersonView: View {
                     if p.hiddenFromClaude { Chip { Image(systemName: "eye.slash").font(.system(size: 10)); Text("hidden from Claude") } }
                 }
                 CadenceStripView(person: p).padding(.top, 2)
+                NotesField(person: p).id(p.id).frame(maxWidth: 520).padding(.top, 4)
             }
         }.padding(.top, 14)
     }
@@ -629,16 +730,7 @@ struct PersonView: View {
         HStack(spacing: 8) {
             Image(systemName: "plus").font(.system(size: 11)).foregroundStyle(Theme.text2)
             TextField("Add for \(p.name.split(separator: " ").first.map(String.init) ?? p.name) — e.g. owe review RFC fri", text: $quick)
-                .textFieldStyle(.plain).font(.system(size: 13)).onSubmit {
-                    let t = quick.trimmingCharacters(in: .whitespaces)
-                    guard !t.isEmpty else { return }
-                    // Insert @person after an explicit prefix so "owe x" becomes "owe @sara x".
-                    let first = t.split(separator: " ").first.map { String($0).lowercased() } ?? ""
-                    let line = CaptureParser.prefixes[first] != nil && t.contains(" ")
-                        ? first + " @\(p.handle) " + t.dropFirst(first.count).trimmingCharacters(in: .whitespaces)
-                        : "@\(p.handle) " + t
-                    model.save(line); quick = ""
-                }
+                .textFieldStyle(.plain).font(.system(size: 13)).onSubmit { model.captureFor(p, quick); quick = "" }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 9).fill(Theme.elevated))
@@ -698,7 +790,11 @@ struct SearchPalette: View {
     @State private var sel = 0
     @FocusState private var focus: Bool
 
-    struct Row: Identifiable { var id: String; var icon: String; var title: String; var detail: String; var run: () -> Void }
+    struct Row: Identifiable {
+        var id: String; var icon: String; var title: String; var detail: String
+        var terms: [String] = []
+        var run: () -> Void
+    }
 
     var rows: [Row] {
         var out: [Row] = []
@@ -709,20 +805,40 @@ struct SearchPalette: View {
             Row(id: "a-ledger", icon: "scroll", title: "Go to Promise ledger", detail: "action") { go(.ledger) },
             Row(id: "a-inbox", icon: "tray", title: "Go to Inbox", detail: "action") { go(.inbox) },
             Row(id: "a-people", icon: "person.2", title: "Go to People", detail: "action") { go(.people) },
+            Row(id: "a-snoozed", icon: "moon.zzz", title: "Go to Snoozed", detail: "action") { go(.snoozed) },
+            Row(id: "a-done", icon: "checkmark.circle", title: "Go to Done", detail: "action") { go(.done) },
             Row(id: "a-capture", icon: "plus", title: "New capture", detail: "action") { model.showSearch = false; model.openCapture() },
+            Row(id: "a-keys", icon: "keyboard", title: "Keyboard shortcuts", detail: "?") { model.showSearch = false; model.showShortcuts = true },
             Row(id: "a-settings", icon: "gearshape", title: "Open Settings", detail: "action") { model.showSearch = false; model.openSettings() },
         ]
         if q.isEmpty { return actions }
+        out.append(Row(id: "save", icon: "bookmark", title: "Save this search as a filter", detail: "sidebar") { model.showSearch = false; model.addFilter(q) })
         out += actions.filter { $0.title.lowercased().contains(q.lowercased()) }
         out += model.summaries.filter { $0.person.name.lowercased().contains(q.lowercased()) || $0.person.handle.contains(q.lowercased().replacingOccurrences(of: "@", with: "")) }
             .map { s in Row(id: "p-\(s.id)", icon: "person", title: s.person.name, detail: s.person.relation.rawValue) { go(.person(s.person.id)) } }
+        let terms = QueryTerms.words(q)
         let items = (try? model.store.search(q, limit: 12)) ?? []
         out += items.map { i in
-            Row(id: "i-\(i.id)", icon: "circle", title: i.title, detail: "\(i.kind.rawValue)\(i.status == .open ? "" : " · \(i.status.rawValue)")") {
-                if let pid = i.personId { go(.person(pid)) } else { go(.today) }
+            let who = model.person(i.personId)?.name.split(separator: " ").first.map(String.init)
+            let state = i.status == .open ? "" : " · \(i.status.rawValue)"
+            return Row(id: "i-\(i.id)", icon: "circle", title: i.title, detail: "\(i.kind.rawValue)\(who.map { " · \($0)" } ?? "")\(state)", terms: terms) {
+                model.showSearch = false; model.reveal(i)
             }
         }
         return out
+    }
+
+    func highlighted(_ s: String, _ terms: [String]) -> AttributedString {
+        var a = AttributedString(s)
+        for t in terms {
+            var from = a.startIndex
+            while from < a.endIndex, let r = a[from...].range(of: t, options: .caseInsensitive) {
+                a[r].underlineStyle = .single
+                a[r].font = .system(size: 13, weight: .semibold)
+                from = r.upperBound
+            }
+        }
+        return a
     }
 
     var body: some View {
@@ -741,7 +857,8 @@ struct SearchPalette: View {
                 ForEach(Array(r.prefix(9).enumerated()), id: \.element.id) { idx, row in
                     HStack(spacing: 10) {
                         Image(systemName: row.icon).font(.system(size: 11)).foregroundStyle(Theme.text2).frame(width: 18)
-                        Text(row.title).font(.system(size: 13)).lineLimit(1)
+                        if row.terms.isEmpty { Text(row.title).font(.system(size: 13)).lineLimit(1) }
+                        else { Text(highlighted(row.title, row.terms)).font(.system(size: 13)).lineLimit(1) }
                         Spacer()
                         Text(row.detail).font(Theme.mono).foregroundStyle(Theme.text2)
                     }

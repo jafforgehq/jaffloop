@@ -4,7 +4,7 @@ import JaffloopCore
 import GRDB
 
 enum Nav: Hashable {
-    case today, ledger, inbox, people, releases, person(String), tag(String)
+    case today, ledger, inbox, people, releases, done, snoozed, person(String), tag(String), filter(String)
 
     var stored: String {
         switch self {
@@ -13,8 +13,11 @@ enum Nav: Hashable {
         case .inbox: return "inbox"
         case .people: return "people"
         case .releases: return "releases"
+        case .done: return "done"
+        case .snoozed: return "snoozed"
         case .person(let id): return "person:\(id)"
         case .tag(let t): return "tag:\(t)"
+        case .filter(let q): return "filter:\(q)"
         }
     }
 
@@ -25,8 +28,11 @@ enum Nav: Hashable {
         case "inbox": self = .inbox
         case "people": self = .people
         case "releases": self = .releases
+        case "done": self = .done
+        case "snoozed": self = .snoozed
         default:
-            if s.hasPrefix("person:") { self = .person(String(s.dropFirst(7))) }
+            if s.hasPrefix("filter:") { self = .filter(String(s.dropFirst(7))) }
+            else if s.hasPrefix("person:") { self = .person(String(s.dropFirst(7))) }
             else if s.hasPrefix("tag:") { self = .tag(String(s.dropFirst(4))) }
             else { return nil }
         }
@@ -86,7 +92,12 @@ final class AppModel: ObservableObject {
     @Published var openItems: [Item] = []
     @Published var summaries: [PersonSummary] = []
     @Published var tags: [(String, Int)] = []
-    @Published var nav: Nav = .today { didSet { if persist { UserDefaults.standard.set(nav.stored, forKey: "lastNav") } } }
+    @Published var nav: Nav = .today {
+        didSet {
+            if persist { UserDefaults.standard.set(nav.stored, forKey: "lastNav") }
+            if !travelling { navHistory.visit(from: oldValue, to: nav) }
+        }
+    }
     @Published var showSearch = false
     @Published var lastCapture = ""
     @Published var captureBlip = 0
@@ -109,12 +120,23 @@ final class AppModel: ObservableObject {
     @Published var pinnedPeople: Set<String> = [] { didSet { if persist { UserDefaults.standard.set(Array(pinnedPeople), forKey: "pinnedPeople") } } }
     @Published var collapsed: Set<String> = [] { didSet { if persist { UserDefaults.standard.set(Array(collapsed), forKey: "collapsedSections") } } }
     @Published var autoUpdateCheck = false { didSet { if persist { UserDefaults.standard.set(autoUpdateCheck, forKey: "autoUpdateCheck") } } }
+    @Published var sidebarHidden = false { didSet { if persist { UserDefaults.standard.set(sidebarHidden, forKey: "sidebarHidden") } } }
+    @Published var savedFilters: [String] = [] { didSet { if persist { UserDefaults.standard.set(savedFilters, forKey: "savedFilters") } } }
+    @Published var pinOrder: [String] = [] { didSet { if persist { UserDefaults.standard.set(pinOrder, forKey: "pinOrder") } } }
+    @Published var showShortcuts = false
+    @Published var showWelcome = false
+    @Published var reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+    @Published var soundSave = "Tink" { didSet { save("soundSave", soundSave) } }
+    @Published var soundComplete = "Glass" { didSet { save("soundComplete", soundComplete) } }
+    @Published var soundUndo = "Pop" { didSet { save("soundUndo", soundUndo) } }
     /// Set for the session when the app has just been updated, so the banner can say from which version.
     @Published var updatedFrom: String?
 
     /// When true views skip entrance animation and system materials (used for README screenshots).
     var snapshot = false
     private let persist: Bool
+    private var navHistory = NavHistory<Nav>()
+    private var travelling = false
 
     var onChange: (() -> Void)?
     var openCapture: () -> Void = {}
@@ -143,13 +165,26 @@ final class AppModel: ObservableObject {
         pinnedPeople = Set(u.stringArray(forKey: "pinnedPeople") ?? [])
         collapsed = Set(u.stringArray(forKey: "collapsedSections") ?? [])
         autoUpdateCheck = u.bool(forKey: "autoUpdateCheck")
+        sidebarHidden = u.bool(forKey: "sidebarHidden")
+        savedFilters = u.stringArray(forKey: "savedFilters") ?? []
+        pinOrder = u.stringArray(forKey: "pinOrder") ?? []
+        soundSave = u.string(forKey: "soundSave") ?? "Tink"
+        soundComplete = u.string(forKey: "soundComplete") ?? "Glass"
+        soundUndo = u.string(forKey: "soundUndo") ?? "Pop"
         if let s = u.string(forKey: "lastNav"), let n = Nav(stored: s) {
             switch n {
             case .person(let id) where summary(id) == nil: break
             default: nav = n
             }
         }
+        navHistory = NavHistory()
         checkWhatsNew()
+        if !u.bool(forKey: "welcomeSeen") {
+            if openItems.isEmpty && summaries.isEmpty && updatedFrom == nil { showWelcome = true } else { u.set(true, forKey: "welcomeSeen") }
+        }
+        NotificationCenter.default.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        }
     }
 
     private func save(_ key: String, _ value: String) { if persist { UserDefaults.standard.set(value, forKey: key) } }
@@ -240,6 +275,9 @@ final class AppModel: ObservableObject {
         case .inbox: return "Inbox"
         case .people: return "People"
         case .releases: return "What's new"
+        case .done: return "Done"
+        case .snoozed: return "Snoozed"
+        case .filter(let q): return q
         case .person(let id): return summary(id)?.person.name ?? "Person"
         case .tag(let t): return "#\(t)"
         }
@@ -259,6 +297,7 @@ final class AppModel: ObservableObject {
     func undoLast() {
         guard let t = toast else { return }
         withAnimation(Motion.ease(0.2)) { toast = nil }
+        play(soundUndo)
         t.undo?()
     }
 
@@ -277,7 +316,7 @@ final class AppModel: ObservableObject {
         _ = try? store.capture(line, source: .hotkey)
         lastCapture = line
         captureBlip += 1
-        if settings.sound { NSSound(named: "Tink")?.play() }
+        play(soundSave)
         reload()
     }
 
@@ -288,13 +327,90 @@ final class AppModel: ObservableObject {
         var spawned: [Item] = []
         for id in ids { if let n = (try? store.complete(id)) ?? nil { spawned.append(n) } }
         if settings.haptics { NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now) }
-        if settings.sound { NSSound(named: "Glass")?.play() }
+        play(soundComplete)
         multi.subtract(ids)
         reload()
         showToast("Done · \(label ?? "\(ids.count) items")") { [weak self] in self?.restore(before, drop: spawned) }
     }
 
-    func reopen(_ i: Item) { try? store.reopen(i.id); reload() }
+    func reopen(_ i: Item) {
+        let before = prior([i.id])
+        try? store.reopen(i.id)
+        reload()
+        showToast("Reopened · \(short(i.title))") { [weak self] in self?.restore(before) }
+    }
+
+    /// Bring a snoozed item back now.
+    func wake(_ i: Item) {
+        let before = prior([i.id])
+        try? store.update(i.id) { $0.snoozedUntil = nil }
+        reload()
+        showToast("Back on your list · \(short(i.title))") { [weak self] in self?.restore(before) }
+    }
+
+    /// Generic edit with an undo toast (drawer fields, inline dates, kind, person).
+    func update(_ i: Item, _ message: String, _ change: @escaping (inout Item) -> Void) {
+        let before = prior([i.id])
+        try? store.update(i.id, change)
+        reload()
+        showToast(message) { [weak self] in self?.restore(before) }
+    }
+
+    func setTags(_ i: Item, _ tags: [String]) {
+        let old = tagsOf(i.id)
+        let clean = tags.map { $0.trimmingCharacters(in: .whitespaces).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "#")) }.filter { !$0.isEmpty }
+        guard clean != old else { return }
+        try? store.setTags(i.id, clean)
+        reload()
+        showToast("Tags updated") { [weak self] in try? self?.store.setTags(i.id, old); self?.reload() }
+    }
+
+    func play(_ name: String) {
+        guard settings.sound, name != "None" else { return }
+        NSSound(named: NSSound.Name(name))?.play()
+    }
+
+    // MARK: history, filters, layout
+
+    func goBack() {
+        travelling = true; defer { travelling = false }
+        if let n = navHistory.goBack(from: nav) { nav = n }
+    }
+    func goForward() {
+        travelling = true; defer { travelling = false }
+        if let n = navHistory.goForward(from: nav) { nav = n }
+    }
+    func toggleSidebar() { withAnimation(Motion.spring()) { sidebarHidden.toggle() } }
+
+    func addFilter(_ q: String) {
+        let t = q.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, !savedFilters.contains(t) else { return }
+        savedFilters.append(t)
+        showToast("Saved filter · \(t)")
+    }
+    func removeFilter(_ q: String) { savedFilters.removeAll { $0 == q }; if nav == .filter(q) { nav = .today } }
+    func filterItems(_ q: String) -> [Item] { (try? store.search(q, limit: 200)) ?? [] }
+
+    func ordered(_ items: [Item]) -> [Item] { PinOrder.apply(items, order: pinOrder) }
+    func movePin(_ id: String, onto target: String) {
+        let base = PinOrder.apply(openItems.filter { $0.pinned }, order: pinOrder).map { $0.id }
+        pinOrder = PinOrder.move(id, onto: target, in: base)
+    }
+
+    /// Jump from search to an item: open the list it lives in and select it.
+    func reveal(_ i: Item) {
+        if i.status != .open { nav = .done }
+        else if let pid = i.personId { nav = .person(pid) }
+        else if i.inbox { nav = .inbox }
+        else { nav = .today }
+        selectedItemId = i.id
+    }
+
+    func dismissWelcome(addExample: Bool = false) {
+        if addExample { _ = try? store.capture("todo Try Jaffloop: press \(hotkeyLabel(settings.hotkey)) and capture something fri"); reload() }
+        UserDefaults.standard.set(true, forKey: "welcomeSeen")
+        withAnimation(Motion.ease(0.25)) { showWelcome = false }
+    }
 
     func drop(_ i: Item) { dropMany([i.id], label: short(i.title)) }
 
@@ -325,6 +441,17 @@ final class AppModel: ObservableObject {
         reload()
         let who = handle.flatMap { h in summaries.first { $0.person.handle == h }?.person.name }
         showToast("\(who.map { "Assigned to \($0)" } ?? "Updated") · \(label ?? "\(ids.count) items")") { [weak self] in self?.restore(before) }
+    }
+
+    /// "owe review RFC fri" typed on someone's page becomes "owe @handle review RFC fri".
+    func captureFor(_ p: Person, _ text: String) {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { return }
+        let first = t.split(separator: " ").first.map { String($0).lowercased() } ?? ""
+        let line = CaptureParser.prefixes[first] != nil && t.contains(" ")
+            ? first + " @\(p.handle) " + t.dropFirst(first.count).trimmingCharacters(in: .whitespaces)
+            : "@\(p.handle) " + t
+        save(line)
     }
 
     func rename(_ i: Item, _ title: String) {

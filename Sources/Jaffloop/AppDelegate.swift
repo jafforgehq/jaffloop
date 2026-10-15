@@ -246,6 +246,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         add(view, "Promise Ledger", #selector(navLedger), "2", target: self)
         add(view, "Inbox", #selector(navInbox), "3", target: self)
         add(view, "People", #selector(navPeople), "4", target: self)
+        view.addItem(.separator())
+        add(view, "Back", #selector(menuBack), "[", target: self)
+        add(view, "Forward", #selector(menuForward), "]", target: self)
+        add(view, "Hide or Show Sidebar", #selector(menuSidebar), "\\", target: self)
 
         let winItem = NSMenuItem(); main.addItem(winItem)
         let win = NSMenu(title: "Window"); winItem.submenu = win
@@ -255,11 +259,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         let helpItem = NSMenuItem(); main.addItem(helpItem)
         let help = NSMenu(title: "Help"); helpItem.submenu = help
+        add(help, "Keyboard Shortcuts", #selector(menuShortcuts), "/", target: self)
         add(help, "What's New and Roadmap", #selector(menuWhatsNew), target: self)
         NSApp.helpMenu = help
         NSApp.mainMenu = main
     }
 
+    @objc func menuBack() { openMain(); model.goBack() }
+    @objc func menuForward() { openMain(); model.goForward() }
+    @objc func menuSidebar() { openMain(); model.toggleSidebar() }
+    @objc func menuShortcuts() { openMain(); withAnimation(Motion.ease(0.2)) { model.showShortcuts.toggle() } }
     @objc func menuWhatsNew() { openMain(); model.nav = .releases }
     @objc func menuUpdates() { openMain(); model.nav = .releases; model.updates.check() }
     /// ⌘Z undoes the last action while its toast is showing, otherwise text undo as usual.

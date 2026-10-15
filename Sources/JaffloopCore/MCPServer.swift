@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 /// Keep in sync with VERSION in scripts/build-app.sh.
-public let mcpServerVersion = "0.0.3"
+public let mcpServerVersion = "0.0.4"
 
 /// Minimal MCP server over newline-delimited JSON-RPC (stdio). No network.
 public final class MCPServer {

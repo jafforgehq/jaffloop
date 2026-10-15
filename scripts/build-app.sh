@@ -7,7 +7,7 @@
 #   NOTARY_PROFILE=jaffloop scripts/build-app.sh   # also notarize + staple (see README)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VERSION="${VERSION:-0.0.3}"
+VERSION="${VERSION:-0.0.4}"
 OUT="dist"
 APP="$OUT/Jaffloop.app"
 

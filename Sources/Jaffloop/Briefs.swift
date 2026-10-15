@@ -7,9 +7,36 @@ import JaffloopCore
 struct PersonBriefView: View {
     @EnvironmentObject var model: AppModel
     let person: Person
+    @State private var copied = false
+
+    /// The same brief as plain text, for pasting into notes or a message.
+    func plainText() -> String {
+        var out = ["Brief: \(person.name)"]
+        if let s = model.summary(person.id) {
+            out.append("Last 1:1: \(s.daysSinceLast.map { "\($0) days ago" } ?? "never")" + (person.cadenceDays.map { " (cadence: every \($0) days)" } ?? ""))
+        }
+        if !person.notes.isEmpty { out += ["", "Notes:", person.notes] }
+        for (title, k) in [("I owe them", ItemKind.owe), ("They owe me", .wait), ("Bring up", .bring)] {
+            let items = model.items(for: person.id, kind: k)
+            out += ["", "\(title):"] + (items.isEmpty ? ["- nothing"] : items.map { "- \($0.title)" + (Fmt.due($0).map { " (\($0))" } ?? "") })
+        }
+        let said = model.saidLog(for: person.id).prefix(5)
+        if !said.isEmpty { out += ["", "Recently said:"] + said.map { "- \"\($0.quote ?? $0.title)\" (\(Fmt.short($0.createdAt, "d MMM")))" } }
+        return out.joined(separator: "\n")
+    }
 
     var body: some View {
-        Page("Brief: \(person.name)", subtitle: "Before you talk") {
+        Page("Brief: \(person.name)", subtitle: "Before you talk", header: {
+            AnyView(HStack(spacing: 8) {
+                GhostButton(title: copied ? "Copied" : "Copy as text") {
+                    NSPasteboard.general.clearContents(); NSPasteboard.general.setString(plainText(), forType: .string); copied = true
+                }
+            }.padding(.top, 12))
+        }) {
+            if !person.notes.isEmpty {
+                SectionHeader(title: "Notes")
+                Text(person.notes).font(.system(size: 12.5)).foregroundStyle(Theme.text).padding(8).fixedSize(horizontal: false, vertical: true)
+            }
             ForEach([("I owe them", ItemKind.owe), ("They owe me", .wait), ("Bring up", .bring)], id: \.0) { title, k in
                 let items = model.items(for: person.id, kind: k)
                 SectionHeader(title: title, count: items.count)
@@ -149,11 +176,26 @@ struct SettingsView: View {
                 }
             }
             Toggle("Haptic feedback on completing an item", isOn: bind(\.haptics))
-            Toggle("Sounds (save click, completion tone)", isOn: bind(\.sound))
+            Toggle("Sounds", isOn: bind(\.sound))
+            if model.settings.sound {
+                soundRow("Save", $model.soundSave)
+                soundRow("Complete", $model.soundComplete)
+                soundRow("Undo", $model.soundUndo)
+            }
             DatePicker("End of day (eod)", selection: timeBinding(\.eodTime), displayedComponents: .hourAndMinute)
             Stepper("Stale wait: \(model.settings.staleDaysAfterDue) days after due", value: bind(\.staleDaysAfterDue), in: 1...30)
             Stepper("Stale undated wait: \(model.settings.staleDaysNoDue) days after creation", value: bind(\.staleDaysNoDue), in: 1...30)
         }.formStyle(.grouped)
+    }
+
+    static let sounds = ["None", "Tink", "Glass", "Pop", "Purr", "Ping", "Morse", "Hero", "Bottle", "Funk"]
+
+    func soundRow(_ label: String, _ choice: Binding<String>) -> some View {
+        HStack {
+            Picker(label, selection: choice) { ForEach(Self.sounds, id: \.self) { Text($0).tag($0) } }
+            Button { if choice.wrappedValue != "None" { NSSound(named: NSSound.Name(choice.wrappedValue))?.play() } } label: { Image(systemName: "speaker.wave.2") }
+                .buttonStyle(.borderless).help("Preview").accessibilityLabel("Preview \(label) sound")
+        }
     }
 
     static let sample = Item(kind: .owe, title: "Review RFC for the on-call rotation", body: "Sara asked for comments before Friday",

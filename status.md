@@ -39,6 +39,12 @@ Packaging and docs: `scripts/build-app.sh`, `scripts/Info.plist`, `scripts/Jaffl
 - Code signing: Developer ID Application, Feda Hadziselimovic (R9QFVTDHY5), hardened runtime. `codesign --verify --deep --strict` passes.
 - A date-only due date bug (off by one day in non-UTC timezones) was found in the smoke test, fixed, and covered by a test.
 
+## Unreleased: 0.0.4 (built, not shipped)
+
+All 20 ideas from the second list are in, versions are already bumped to 0.0.4 (`scripts/build-app.sh`, `mcpServerVersion`), release notes are in `Sources/Jaffloop/Releases.swift`, `docs/CHANGELOG.md` and README. 45 tests pass. Database migration v2 adds `people.notes`; a 0.0.3 database was upgraded and read back by both the new and the old build. To ship: commit, `NOTARY_PROFILE=jaffloop scripts/build-app.sh`, then `gh release create v0.0.4 ...` as for 0.0.3.
+
+Not exercised by hand (only screenshots, unit tests and a launch smoke test): Done and Snoozed actions, drawer editing, inline date popover, Inbox triage keys after the refactor, pin drag-reorder, 1:1 mode and its timer, notes saving, saved filters and search jump, back/forward, sidebar hide, welcome (only shows on an empty database), sound pickers, Reduce Transparency and Increase Contrast.
+
 ## Open items
 
 1. **No LICENSE file.** The spec says the app stays paid and only the MCP server and data format might be open. Decision needed from the owner.

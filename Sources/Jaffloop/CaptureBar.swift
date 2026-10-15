@@ -110,8 +110,8 @@ struct CaptureView: View {
                 }.padding(.horizontal, 18).padding(.vertical, 8)
             }
             .background(
-                RoundedRectangle(cornerRadius: 16).fill(model.snapshot ? AnyShapeStyle(Theme.elevated) : AnyShapeStyle(.clear))
-                    .background(model.snapshot ? AnyView(EmptyView()) : AnyView(VisualEffect(material: .hudWindow, blending: .behindWindow).clipShape(RoundedRectangle(cornerRadius: 16))))
+                RoundedRectangle(cornerRadius: 16).fill(model.snapshot || model.reduceTransparency ? AnyShapeStyle(Theme.elevated) : AnyShapeStyle(.clear))
+                    .background(model.snapshot || model.reduceTransparency ? AnyView(EmptyView()) : AnyView(VisualEffect(material: .hudWindow, blending: .behindWindow).clipShape(RoundedRectangle(cornerRadius: 16))))
             )
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.hairline, lineWidth: 0.5))
             .shadow(color: .black.opacity(0.35), radius: 28, y: 14)
@@ -215,12 +215,7 @@ struct CaptureView: View {
         return time ? "\(day) \(Fmt.short(d, "HH:mm"))" : day
     }
 
-    func recurText(_ r: String) -> String {
-        if r.contains("BYDAY=MO,TU,WE,TH,FR") { return "weekdays" }
-        if let d = r.components(separatedBy: "BYDAY=").last, r.contains("BYDAY"), let n = ["MO": "Mon", "TU": "Tue", "WE": "Wed", "TH": "Thu", "FR": "Fri", "SA": "Sat", "SU": "Sun"][d] { return "every \(n)" }
-        if r.contains("INTERVAL="), let n = r.components(separatedBy: "INTERVAL=").last { return "every \(n) \(r.contains("WEEKLY") ? "weeks" : r.contains("MONTHLY") ? "months" : "days")" }
-        return r.contains("MONTHLY") ? "monthly" : r.contains("DAILY") ? "daily" : "weekly"
-    }
+    func recurText(_ r: String) -> String { RecurrenceText.describe(r) }
 
     // MARK: actions
 
