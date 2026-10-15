@@ -8,7 +8,7 @@ export const releaseNotes: ReleaseNote[] = [
     version: '0.1.0', date: '2026-10-15', title: 'Now built on Electron', highlights: [
       'Same app, same data, same shortcuts, rebuilt on Electron.',
       'Updates install themselves: Jaffloop checks GitHub in the background, downloads the update and asks before restarting. Turn it off in Settings → About.',
-      'Intel Macs are supported (a separate download).',
+      'For Apple Silicon Macs (M1 and later). An Intel build is on the roadmap.',
       'Your database, notes and settings carry over untouched. Interface preferences from 0.0.x are imported once.',
       'The MCP command is unchanged: Contents/MacOS/jaffloop-mcp.',
     ],

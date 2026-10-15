@@ -12,6 +12,7 @@ Also shown inside the app (What's new, Roadmap tab). Plans change. Nothing here 
 ## Later
 
 - Growth and feedback thread per person for review and promotion evidence.
+- Intel (x64) build.
 - Optional database encryption.
 - Import and export as Markdown and CSV.
 - Shortcuts actions and a `jaffloop://` URL scheme.

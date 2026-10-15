@@ -6,7 +6,7 @@
 #   scripts/release-mac.sh --publish       ...and upload to the GitHub release for the version in package.json (the update
 #                                          manifest last, so installed apps only see a release once it is complete)
 #   scripts/release-mac.sh --skip-notarize sign only (fast; Gatekeeper will still warn on other Macs)
-#   scripts/release-mac.sh --arch arm64    build one architecture only (arm64 | x64 | both, default both)
+#   scripts/release-mac.sh --arch x64      another architecture (arm64 | x64 | both; default arm64: Jaffloop ships for Apple Silicon only)
 #
 # One-time setup (see docs/SIGNING.md):
 #   1. A "Developer ID Application" certificate in your keychain (Xcode > Settings > Accounts > Manage Certificates).
@@ -20,7 +20,7 @@ cd "$(dirname "$0")/.."
 PROFILE="${NOTARY_PROFILE:-jaffloop}"
 PUBLISH=0
 NOTARIZE=1
-ARCH=both
+ARCH=arm64
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -33,8 +33,6 @@ while [ $# -gt 0 ]; do
   shift
 done
 case "$ARCH" in arm64|x64|both) ;; *) echo "--arch must be arm64, x64 or both" >&2; exit 2 ;; esac
-# One manifest serves both Macs: a one-architecture release would send the other architecture to the wrong build.
-if [ "$PUBLISH" = 1 ] && [ "$ARCH" != both ]; then echo "--publish needs both architectures (drop --arch): installed apps on the other kind of Mac would update to the wrong build." >&2; exit 2; fi
 
 say()  { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 die()  { printf '\n\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }

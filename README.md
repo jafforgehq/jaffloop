@@ -97,9 +97,9 @@ Dates: `today`, `tomorrow`, weekdays, `next mon`, `15 nov`, `in 2h`, `eod`, `eow
 
 ## Install
 
-Requires macOS 12 or later, on Apple Silicon or Intel.
+Requires macOS 12 or later on an Apple Silicon Mac (M1 and later). There is no Intel build yet.
 
-1. Download the `.dmg` for your Mac from [Releases](../../releases): `arm64` for Apple Silicon (M1 and later), `x64` for Intel.
+1. Download `Jaffloop-<version>-arm64.dmg` from [Releases](../../releases).
 2. Open it and drag Jaffloop to Applications. Releases are signed with a Developer ID and notarized by Apple, so it opens without warnings.
 3. Press `⌥Space` anywhere to capture.
 
@@ -140,7 +140,7 @@ npm run dev            # build and run (uses your real database; set JAFFLOOP_DB
 npm test               # unit tests (parser, rules, store, MCP server, UI logic, main process)
 npm run test:e2e       # drives the built app with Playwright against a throw-away database
 npm run typecheck
-scripts/release-mac.sh # signed, notarized dmg and zip for both Mac architectures in ./release
+scripts/release-mac.sh # signed, notarized dmg and zip (Apple Silicon) in ./release
 ```
 
 Layout: `src/core` (parser, rules, SQLite store on `node:sqlite`, pure logic shared with the interface), `src/mcp` (the stdio
