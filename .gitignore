@@ -1,5 +1,10 @@
-.build/
+node_modules/
 dist/
-*.xcodeproj
+release/
+.electron-builder.*.yml
 .DS_Store
+# leftovers from the Swift version
+.build/
 .swiftpm/
+*.xcodeproj
+build/bin/

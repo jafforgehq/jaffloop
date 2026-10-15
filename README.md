@@ -2,7 +2,7 @@
 
 A macOS menu bar app for engineering managers. It tracks **what you owe people, what they owe you, what to bring up with them, and what you told them**, so nothing from a fast-moving week gets lost.
 
-Capture in one line. Everything stays on your Mac. Claude can read and write your data through a local MCP server, and the app itself has no AI. It makes no network calls, except an update check when you press the button (or turn on the daily check).
+Capture in one line. Everything stays on your Mac. Claude can read and write your data through a local MCP server, and the app itself has no AI. Its only network use is checking GitHub for new versions.
 
 ![Today](docs/screenshots/today-dark.png)
 
@@ -97,21 +97,24 @@ Dates: `today`, `tomorrow`, weekdays, `next mon`, `15 nov`, `in 2h`, `eod`, `eow
 
 ## Install
 
-Requires macOS 14 or later on Apple Silicon.
+Requires macOS 12 or later, on Apple Silicon or Intel.
 
-1. Download `Jaffloop-0.0.4.zip` from [Releases](../../releases) and unzip it.
-2. Move `Jaffloop.app` to `/Applications`.
-3. Open it. See [Signing](#signing-and-notarization) if macOS says it cannot verify the app.
+1. Download the `.dmg` for your Mac from [Releases](../../releases): `arm64` for Apple Silicon (M1 and later), `x64` for Intel.
+2. Open it and drag Jaffloop to Applications. Releases are signed with a Developer ID and notarized by Apple, so it opens without warnings.
+3. Press `⌥Space` anywhere to capture.
 
-Verify the download against `Jaffloop-0.0.4.zip.sha256`:
+Verify a download with `SHA256SUMS.txt` from the same release (`shasum -a 256 -c SHA256SUMS.txt`).
 
-```sh
-shasum -a 256 -c Jaffloop-0.0.4.zip.sha256
-```
+Coming from the 0.0.x Swift app? Replace it with this one. Your database, notes and settings are used as they are, the interface
+preferences are imported once, and the MCP command is unchanged.
 
 ## Updating
 
-Jaffloop never updates itself. In Settings, then About, press **Check for updates**: it asks GitHub for the latest release, tells you if there is a newer one, and links to the download. Unzip, quit Jaffloop, and replace it in Applications. Your data lives in `~/Library/Application Support/Jaffloop/` and is untouched. The first time you open a new version, the **What's new** page shows what changed. Turn on the daily check in Settings if you want the sidebar to tell you when an update exists.
+Jaffloop updates itself. About 15 seconds after launch and every 6 hours it checks GitHub for a newer release (only signed
+releases can update in place), downloads it in the background and tells you: **Update ready, restart** in the sidebar and a dialog
+asking *Update and restart* or *Later*. Nothing is installed without your yes, and a downloaded update also installs when you quit.
+Turn the background check off in Settings → About; **Check for updates** still works by hand. The first launch of a new
+version opens **What's new**. The only network use is this check against GitHub releases; your data never leaves the Mac.
 
 ## Use it with Claude
 
@@ -129,52 +132,40 @@ Privacy: people marked hidden are excluded from every tool and resource. Read-on
 
 ## Build from source
 
-```sh
-swift test                 # 33 tests: parser, derived rules, store, MCP
-swift run Jaffloop         # run unbundled (no notifications; use the .app for those)
-scripts/build-app.sh       # signed Jaffloop.app and zip in dist/
-```
-
-Re-render the README screenshots with `dist/Jaffloop.app/Contents/MacOS/Jaffloop --screenshots docs/screenshots`.
-
-Layout: `JaffloopCore` (models, GRDB/SQLite with WAL and FTS5, parser, rules, MCP server), `Jaffloop` (SwiftUI and AppKit app), `jaffloop-mcp` (stdio entry point). The spec is in [`docs/jaffloop-spec.md`](docs/jaffloop-spec.md) and the design mocks in `docs/jaffloop-mocks.html`.
-
-## Signing and notarization
-
-Jaffloop is distributed outside the Mac App Store, because the MCP server needs unsandboxed access to the database. Builds are signed with a **Developer ID Application** certificate and the **hardened runtime**, then (for public releases) notarized by Apple.
-
-`scripts/build-app.sh` does the following:
-
-1. Builds a release binary and assembles `Jaffloop.app` (the app and `jaffloop-mcp` in `Contents/MacOS`).
-2. Signs the nested `jaffloop-mcp` first, then the app, with `--options runtime --timestamp`. It uses no entitlements.
-3. Verifies with `codesign --verify --deep --strict`.
-4. Zips with `ditto` and writes a SHA-256 checksum.
-5. If `NOTARY_PROFILE` is set, submits to Apple, waits, staples the ticket, and checks with `spctl`.
-
-The signing identity is found automatically, or set it yourself:
+Node 22 or later.
 
 ```sh
-SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" scripts/build-app.sh
-SIGN_IDENTITY=- scripts/build-app.sh      # ad-hoc, local use only
+npm install
+npm run dev            # build and run (uses your real database; set JAFFLOOP_DB=/tmp/test.sqlite to experiment)
+npm test               # unit tests (parser, rules, store, MCP server, UI logic, main process)
+npm run test:e2e       # drives the built app with Playwright against a throw-away database
+npm run typecheck
+scripts/release-mac.sh # signed, notarized dmg and zip for both Mac architectures in ./release
 ```
 
-**One-time notarization setup** (needs an Apple ID with an [app-specific password](https://support.apple.com/102654)):
+Layout: `src/core` (parser, rules, SQLite store on `node:sqlite`, pure logic shared with the interface), `src/mcp` (the stdio
+MCP server), `src/main` (windows, tray, hotkey, notifications, updates), `src/renderer` (Preact interface, one bundle for every
+window), `src/shared` (types and the interface to the main process). The design notes are in
+[`docs/ELECTRON.md`](docs/ELECTRON.md) and the original spec in [`docs/jaffloop-spec.md`](docs/jaffloop-spec.md).
+Environment variables for tests and screenshots: `JAFFLOOP_DB`, `JAFFLOOP_USERDATA`, `JAFFLOOP_SEED=1`, `JAFFLOOP_NO_UPDATER=1`,
+`JAFFLOOP_SMOKE=1`. Regenerate the README screenshots with `npm run screenshots`.
+
+## Signing and releasing
+
+Builds are signed with a **Developer ID Application** certificate (hardened runtime) and notarized by Apple.
+`scripts/release-mac.sh` does everything from your own Mac with the certificate in your keychain and a notarytool profile:
 
 ```sh
-xcrun notarytool store-credentials jaffloop --apple-id you@example.com --team-id TEAMID
-NOTARY_PROFILE=jaffloop scripts/build-app.sh
+xcrun notarytool store-credentials jaffloop --apple-id you@example.com --team-id TEAMID   # once; app-specific password
+scripts/release-mac.sh              # build, sign, notarize, verify, self-test, write the update manifest
+scripts/release-mac.sh --publish    # ...and upload to the GitHub release for the version in package.json
 ```
 
-**Verify a build:**
+It checks `codesign`, `spctl` and `stapler`, launches the signed app once and calls the MCP wrapper, and validates
+`latest-mac.yml` (the manifest installed apps read) before anything is uploaded; the manifest goes up last. Release checklist:
+update `docs/CHANGELOG.md` and `src/renderer/releases-data.ts`, bump `version` in `package.json`, run the script.
 
-```sh
-codesign -dvv /Applications/Jaffloop.app          # Authority=Developer ID Application, flags=runtime
-codesign --verify --deep --strict /Applications/Jaffloop.app
-spctl --assess --type execute --verbose /Applications/Jaffloop.app   # "accepted, source=Notarized Developer ID"
-```
+## Not in this version
 
-**Release status:** the v0.0.4 zip on GitHub is Developer ID signed with the hardened runtime and **notarized and stapled by Apple**, so it opens on first launch without a Gatekeeper warning. The v0.0.1 zip was signed but not notarized.
-
-## Not in v1
-
-No sync, iOS app, sharing, AI inside the app, planning tools, or Mac App Store build. See the spec for the full list and the post-v1 ideas.
+No sync, iOS app, sharing, AI inside the app, planning tools, or Mac App Store build. See the spec and
+[`docs/ROADMAP.md`](docs/ROADMAP.md).

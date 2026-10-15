@@ -12,7 +12,6 @@ Also shown inside the app (What's new, Roadmap tab). Plans change. Nothing here 
 ## Later
 
 - Growth and feedback thread per person for review and promotion evidence.
-- Universal (Intel) build.
 - Optional database encryption.
 - Import and export as Markdown and CSV.
 - Shortcuts actions and a `jaffloop://` URL scheme.
@@ -20,8 +19,8 @@ Also shown inside the app (What's new, Roadmap tab). Plans change. Nothing here 
 ## Open decisions
 
 - License: which parts are open (MCP server, data format) and which stay paid.
-- Whether updates should ever download in the background. Today they never do.
+- Whether updates should ever install without asking. Today they download in the background and ask before restarting.
 
 ## Keeping this in sync
 
-The in-app copy lives in `Sources/Jaffloop/Releases.swift`. When you ship a version: add its entry there and to `docs/CHANGELOG.md`, bump `VERSION` in `scripts/build-app.sh` and `mcpServerVersion` in `Sources/JaffloopCore/MCPServer.swift`, then release.
+The in-app copy lives in `src/renderer/releases-data.ts`. When you ship a version: add its entry there and to `docs/CHANGELOG.md`, bump `version` in `package.json` (the MCP server and the About page read it), then release.

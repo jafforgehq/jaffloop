@@ -1,64 +1,34 @@
 # Jaffloop status
 
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 ## Where we are
 
-Version 0.0.3 is built, tested (39 tests), signed, notarized, and published. It is a UI release plus an in-app update check and What's new page.
+Version 0.1.0: Jaffloop rebuilt on Electron (TypeScript, Preact, `node:sqlite`) with `electron-updater` auto update. It is the
+same product as the Swift 0.0.4 (same database, screens, shortcuts, MCP command). The Swift sources are in git history (tag `v0.0.4`).
 
 - Repo (public): https://github.com/jafforgehq/jaffloop
-- Release: https://github.com/jafforgehq/jaffloop/releases/tag/v0.0.3
-- Release assets: `Jaffloop-0.0.3.zip` and `Jaffloop-0.0.3.zip.sha256`
-- Older releases (0.0.1, 0.0.2) stay published.
-
-## What changed in 0.0.3
-
-See `docs/CHANGELOG.md`. In short: keyboard selection, undo toast, details drawer, inline edit, multi-select, drag to assign, Today grouping/collapse/focus, age badges, locale clock, 12-week 1:1 strip, pinned people, capture preview, menu bar count and quick add, appearance/accent/density settings, calendar removed.
-
-## Updates and release notes
-
-- Settings, About, and the What's new page have a **Check for updates** button. It calls the GitHub releases API once, only when pressed (or daily if the user opts in). It never downloads or installs; it links to the zip and release page.
-- First launch of a newer version opens What's new with a banner. Version tracking started in 0.0.3, so an existing install with data is treated as updated from "an earlier version".
-- Release notes and roadmap live in `Sources/Jaffloop/Releases.swift` (in app) and `docs/CHANGELOG.md`, `docs/ROADMAP.md`. Release checklist is at the bottom of `docs/ROADMAP.md`.
+- Plan and contracts: `docs/ELECTRON.md`. Changes: `docs/CHANGELOG.md`. Plans: `docs/ROADMAP.md`.
 
 ## What is built
 
-A SwiftPM package (tools 5.9, macOS 14+, GRDB 6.29) with three targets:
-
-- `JaffloopCore`: models, GRDB database (WAL, FTS5), settings, the deterministic capture parser and recurrence, the derived rules (slipping, stale wait, overdue, cadence), the store, and a hand-written stdio MCP server (12 tools, 3 resources, read-only mode, per-person hiding, audit log).
-- `Jaffloop`: the SwiftUI and AppKit app. It has the main window (Today, Ledger, Inbox, People, Person, Tag, command palette), the global capture bar, pre-meeting card, person and morning briefs, the menu bar popover, Settings, read-only calendar access, and notifications.
-- `jaffloop-mcp`: the stdio entry point. It supports `--db <path>` and `--version`.
-
-Packaging and docs: `scripts/build-app.sh`, `scripts/Info.plist`, `scripts/Jaffloop.entitlements`, `scripts/make-icon.swift`, `README.md` with screenshots in `docs/screenshots/`, and the spec with its decisions log in `docs/jaffloop-spec.md`.
+- `src/core`: capture parser, recurrence, rules, SQLite store (GRDB-compatible schema, FTS5), settings, demo seed. 170 unit tests incl. compatibility tests against databases made by the Swift app.
+- `src/mcp`: stdio MCP server (12 tools, resources, read-only mode, per-person hiding, audit log), output diffed against the Swift server.
+- `src/main`: windows (main, capture panel, tray popover, settings, briefs), tray, global hotkey, menu, notifications, UI state, update controller around `electron-updater`.
+- `src/renderer`: every screen (Today, Ledger, Inbox, People, Person with 1:1 mode and notes, Done, Snoozed, filters, What's new, search, shortcuts, welcome, drawer, bulk actions, undo).
+- `scripts/release-mac.sh`: build, sign (Developer ID), notarize, verify, self-test, write the update manifest, optionally publish.
 
 ## Verified
 
-- `swift test`: 33 tests, 0 failures (parser, rules, store, MCP).
-- The signed `.app` launches and stays running.
-- `jaffloop-mcp` answered initialize, capture, and list_items over stdio.
-- Code signing: Developer ID Application, Feda Hadziselimovic (R9QFVTDHY5), hardened runtime. `codesign --verify --deep --strict` passes.
-- A date-only due date bug (off by one day in non-UTC timezones) was found in the smoke test, fixed, and covered by a test.
-
-## Unreleased: 0.0.4 (built, not shipped)
-
-All 20 ideas from the second list are in, versions are already bumped to 0.0.4 (`scripts/build-app.sh`, `mcpServerVersion`), release notes are in `Sources/Jaffloop/Releases.swift`, `docs/CHANGELOG.md` and README. 45 tests pass. Database migration v2 adds `people.notes`; a 0.0.3 database was upgraded and read back by both the new and the old build. To ship: commit, `NOTARY_PROFILE=jaffloop scripts/build-app.sh`, then `gh release create v0.0.4 ...` as for 0.0.3.
-
-Not exercised by hand (only screenshots, unit tests and a launch smoke test): Done and Snoozed actions, drawer editing, inline date popover, Inbox triage keys after the refactor, pin drag-reorder, 1:1 mode and its timer, notes saving, saved filters and search jump, back/forward, sidebar hide, welcome (only shows on an empty database), sound pickers, Reduce Transparency and Increase Contrast.
+- `npm run typecheck`, `npm test` (230 unit tests), `npm run test:e2e` (the built app driven by Playwright against a temp database: capture, keyboard, undo, edit, snooze, search, 1:1, people, appearance, hotkey, settings, MCP write detection, update flow against a local feed) all pass.
+- Screenshots in `docs/screenshots` are produced by `npm run screenshots` from the real app.
 
 ## Open items
 
-1. **No LICENSE file.** The spec says the app stays paid and only the MCP server and data format might be open. Decision needed from the owner.
-
-## Known gaps and shortcuts
-
-- The database is not encrypted (relies on FileVault).
-- Builds are arm64 only.
-- Notifications only work from the bundled `.app`.
-- Not exercised by hand (only screenshots, 39 unit tests and a launch smoke test): every keyboard shortcut, drag-to-assign, the bulk bar, the undo toast and ⌘Z, inline edit, the flying dot, the hotkey recorder, appearance switching, the menu bar count, the update check against a newer release, the What's new auto-open after an update, VoiceOver, and the focus ring.
-- Update check was verified only against the GitHub API shape (curl), not through the app.
+1. **No LICENSE file.** Decision needed from the owner.
+2. Not exercised by hand: notification delivery and action buttons, the native menu and tray clicks, the global hotkey firing, the fly-to-menu-bar dot, sounds, an in-place update from a real published release (the update flow is tested against a local feed and, for the signed build, see the release notes in the PR/commit).
+3. Existing 0.0.x installs cannot update themselves into 0.1.0 (the Swift app only links to downloads): install it once by hand, then it updates itself.
 
 ## Next steps
 
-1. Use 0.0.3 for a few days and fix what breaks (see the "not exercised by hand" list).
-2. Monday and Friday reviews over MCP (see `docs/ROADMAP.md`).
-3. Choose and add a license.
+Monday and Friday reviews over MCP (see `docs/ROADMAP.md`).

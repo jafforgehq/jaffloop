@@ -1,0 +1,47 @@
+appId: com.jafforge.jaffloop
+productName: Jaffloop
+copyright: Copyright © 2026 Jaffloop
+asar: false
+npmRebuild: false
+buildDependenciesFromSource: false
+# the interface is English only: drop Chromium's other locales (faster signing, smaller download)
+electronLanguages: [en, en-US]
+afterPack: scripts/after-pack.cjs
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/main/**
+  - dist/mcp/**
+  - dist/renderer/**
+  - "!dist/**/*.map"
+  - package.json
+  - build/tray/**
+extraFiles:
+  # Same path the Swift app used, so a Claude config made for 0.0.x keeps working: Contents/MacOS/jaffloop-mcp
+  - from: build/bin/jaffloop-mcp
+    to: MacOS/jaffloop-mcp
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  # the architectures come from the command line (scripts/release-mac.sh passes --arm64 --x64)
+  target: [dmg, zip]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  minimumSystemVersion: "12.0"
+  extendInfo:
+    LSUIElement: false
+dmg:
+  title: "Jaffloop ${version}"
+  contents:
+    - { x: 150, y: 190 }
+    - { x: 410, y: 190, type: link, path: /Applications }
+  window: { width: 560, height: 380 }
+# Makes the build write latest-mac.yml (next to the zips) and embed app-update.yml: where the app looks for updates.
+publish:
+  provider: github
+  owner: jafforgehq
+  repo: jaffloop
+artifactName: "${productName}-${version}-${arch}.${ext}"
