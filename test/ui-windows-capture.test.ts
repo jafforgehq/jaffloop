@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { atQuery, completeAt, highlightSegments, hm, suggestionsFor } from '../src/renderer/windows/capture-logic';
 import type { Person } from '../src/shared/types';
 
-const P = (handle: string, name: string): Person => ({ id: handle, handle, name, relation: 'report', cadenceDays: null, matchEmails: '', hiddenFromClaude: false, archived: false, notes: '', startDate: null, birthday: null });
+const P = (handle: string, name: string): Person => ({ id: handle, handle, name, title: '', relation: 'report', cadenceDays: null, matchEmails: '', hiddenFromClaude: false, archived: false, notes: '', startDate: null, birthday: null });
 const people = [P('sara', 'Sara Lindqvist'), P('amir', 'Amir Haddad'), P('jonas', 'Jonas Weber'), P('maya', 'Maya Chen'), P('priya', 'Priya Nair')];
 
 describe('highlightSegments', () => {

@@ -66,7 +66,7 @@ function sample(): Item {
     id: 'sample', kind: 'owe', title: 'Review RFC for the on-call rotation', body: 'Sara asked for comments before Friday', quote: null, personId: null, status: 'open',
     dueAt: tomorrow, dueHasTime: false, remindAt: null, snoozedUntil: null, snoozeCount: 0, recurRule: null, pinned: false, inbox: false, source: 'hotkey',
     createdAt: Date.now(), updatedAt: Date.now(), completedAt: null, lastTouchedAt: Date.now(),
-    externalId: null, sourceLabel: null, sourceUrl: null, interactionId: null,
+    externalId: null, sourceLabel: null, sourceUrl: null, interactionId: null, proposed: false,
   };
 }
 
@@ -125,6 +125,9 @@ function General() {
         <Row label="End of day (eod)"><TimeField k="eodTime" label="End of day" /></Row>
         <Row label={`Stale wait: ${s.staleDaysAfterDue} days after due`}><Stepper label="stale wait days" value={s.staleDaysAfterDue} min={1} max={30} onChange={(v) => void saveSettings({ staleDaysAfterDue: v })} /></Row>
         <Row label={`Stale undated wait: ${s.staleDaysNoDue} days after creation`}><Stepper label="stale undated wait days" value={s.staleDaysNoDue} min={1} max={30} onChange={(v) => void saveSettings({ staleDaysNoDue: v })} /></Row>
+      </Group>
+      <Group title="People">
+        <Row label="People" hint="Add your team one person at a time: position, birthday, 1:1 cadence."><GhostButton onClick={() => void api.openMain('add-people')}>Add people…</GhostButton></Row>
       </Group>
       <Templates />
     </>
@@ -221,6 +224,11 @@ function Mcp() {
       </Group>
       <h3 class="set-h">Ready-made prompts</h3>
       <ClaudePrompts />
+      <Group title="Review">
+        <Row label="Review what Claude adds first" hint="Items Claude adds wait in your Inbox until you accept them. Until then they stay out of Today, counts and notifications.">
+          <Switch label="Review what Claude adds first" on={settings.value.reviewClaudeItems} onChange={(v) => void saveSettings({ reviewClaudeItems: v })} />
+        </Row>
+      </Group>
       <Group title="Privacy">
         <Row label="Read-only: block all write tools"><Switch label="Read-only" on={settings.value.mcpReadOnly} onChange={(v) => void saveSettings({ mcpReadOnly: v })} /></Row>
         {summaries.value.map((x) => (

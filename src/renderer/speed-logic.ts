@@ -56,7 +56,7 @@ export function matchPeople(summaries: PersonSummary[], recent: Person[], query:
   const q = query.trim().toLowerCase().replace(/@/g, '');
   const rank = new Map(recent.map((p, i) => [p.id, i]));
   return summaries
-    .filter((s) => !s.person.archived && (!q || s.person.name.toLowerCase().includes(q) || s.person.handle.toLowerCase().includes(q)))
+    .filter((s) => !s.person.archived && (!q || s.person.name.toLowerCase().includes(q) || s.person.handle.toLowerCase().includes(q) || s.person.title.toLowerCase().includes(q)))
     .sort((a, b) => (rank.get(a.person.id) ?? 1e9) - (rank.get(b.person.id) ?? 1e9));
 }
 

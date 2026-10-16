@@ -5,6 +5,7 @@ import { ItemList } from '../components/item-row';
 import { Page } from '../components/page';
 import { GhostButton, SectionHeader } from '../components/ui';
 import { Fmt } from '../core';
+import { titleLine } from '../onboarding-logic';
 import { api, itemsFor, openItems, person as personById, settings, snapshot, summary } from '../model';
 import { useReady } from './util';
 
@@ -26,6 +27,7 @@ function plainText(personId: string, said: Item[]): string {
   const p = personById(personId);
   if (!p) return '';
   const out = [`Brief: ${p.name}`];
+  if (p.title) out.push(`Position: ${p.title}`);
   const s = summary(p.id);
   if (s) out.push(`Last 1:1: ${s.daysSinceLast != null ? `${s.daysSinceLast} days ago` : 'never'}${p.cadenceDays != null ? ` (cadence: every ${p.cadenceDays} days)` : ''}`);
   if (p.notes) out.push('', 'Notes:', p.notes);
@@ -53,7 +55,7 @@ export function PersonBriefWindow() {
 
   return (
     <div class="main" style={{ height: '100%' }}>
-      <Page title={`Brief: ${p.name}`} subtitle="Before you talk" header={<div style={{ paddingTop: 12 }}><GhostButton onClick={() => void copy()}>{copied ? 'Copied' : 'Copy as text'}</GhostButton></div>}>
+      <Page title={`Brief: ${p.name}`} subtitle={p.title ? `${titleLine(p)} · before you talk` : 'Before you talk'} header={<div style={{ paddingTop: 12 }}><GhostButton onClick={() => void copy()}>{copied ? 'Copied' : 'Copy as text'}</GhostButton></div>}>
         {p.notes && (
           <div class="section">
             <SectionHeader title="Notes" />

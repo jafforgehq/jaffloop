@@ -162,11 +162,11 @@ describe('source chip', () => {
 });
 
 describe('ready-made prompts', () => {
-  it('lists all ten, shows their text and copies the prompt', async () => {
+  it('lists all eleven, shows their text and copies the prompt', async () => {
     await w.evaluate(() => window.jaffloop.openSettings('mcp'));
     const s = await l.waitView('settings');
     await s.waitForSelector('[data-testid=prompt-card]');
-    expect(await s.locator('[data-testid=prompt-card]').count()).toBe(10);
+    expect(await s.locator('[data-testid=prompt-card]').count()).toBe(11);
     expect(await s.getByText('No other connector needed').count()).toBeGreaterThan(0);
     expect(await s.getByText('since: last Friday (optional)').count()).toBe(1);
     expect(await s.getByText('never creates copies').count()).toBeGreaterThan(0);

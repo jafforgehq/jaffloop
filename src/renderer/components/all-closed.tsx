@@ -1,10 +1,11 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { Fmt } from '../core';
 import { api, settings } from '../model';
 import { Kbd } from './ui';
 
 /** "All loops closed": the ring completes. Used by every empty list (override the words per screen). */
-export function AllClosed({ title = 'All loops closed', message = 'Nothing owed, nothing slipping.', showCapture = true }: { title?: string; message?: string; showCapture?: boolean }) {
+export function AllClosed({ title = 'All loops closed', message = 'Nothing owed, nothing slipping.', showCapture = true, children }: { title?: string; message?: string; showCapture?: boolean; children?: ComponentChildren }) {
   const [closed, setClosed] = useState(false);
   useEffect(() => { const t = requestAnimationFrame(() => setClosed(true)); return () => cancelAnimationFrame(t); }, []);
   return (
@@ -16,6 +17,7 @@ export function AllClosed({ title = 'All loops closed', message = 'Nothing owed,
       </svg>
       <div class="title sm">{title}</div>
       <div class="dim" style={{ fontSize: 12.5, maxWidth: 360 }}>{message}</div>
+      {children}
       {showCapture && (
         <button type="button" class="btn" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }} onClick={() => void api.openCapture()}>
           New capture <Kbd>{Fmt.hotkeyLabel(settings.value.hotkey)}</Kbd>

@@ -26,6 +26,7 @@ export interface NewItem {
   sourceLabel?: string | null;
   sourceUrl?: string | null;
   interactionId?: string | null;
+  proposed?: boolean;
   now?: number;
 }
 
@@ -39,6 +40,7 @@ export function newItem(i: NewItem): Item {
     recurRule: i.recurRule ?? null, pinned: i.pinned ?? false, inbox: i.inbox ?? false, source: i.source ?? 'hotkey',
     createdAt: now, updatedAt: now, completedAt: null, lastTouchedAt: now,
     externalId: i.externalId ?? null, sourceLabel: i.sourceLabel ?? null, sourceUrl: i.sourceUrl ?? null, interactionId: i.interactionId ?? null,
+    proposed: i.proposed ?? false,
   };
 }
 
@@ -54,13 +56,14 @@ export interface NewPerson {
   notes?: string;
   startDate?: string | null;
   birthday?: string | null;
+  title?: string;
 }
 
 export function newPerson(p: NewPerson): Person {
   return {
     id: p.id ?? newId(), handle: p.handle, name: p.name, relation: p.relation ?? 'other', cadenceDays: p.cadenceDays ?? null,
     matchEmails: p.matchEmails ?? '', hiddenFromClaude: p.hiddenFromClaude ?? false, archived: p.archived ?? false, notes: p.notes ?? '',
-    startDate: p.startDate ?? null, birthday: p.birthday ?? null,
+    startDate: p.startDate ?? null, birthday: p.birthday ?? null, title: p.title ?? '',
   };
 }
 

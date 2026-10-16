@@ -2,7 +2,7 @@
 // the MCP server serves it as MCP prompts (prompts/list, prompts/get: they show up as slash commands in Claude),
 // and Settings → Claude (MCP) shows it with Copy buttons. Text uses {{name}} placeholders for arguments.
 // Tool names: capture, add_item, add_items, list_items, get_person, list_people, complete_item, snooze_item, update_item,
-// log_interaction, search, prep_brief, week_summary. Duplicates are skipped by the server when an external_id repeats.
+// log_interaction, save_person, search, prep_brief, week_summary. Duplicates are skipped by the server when an external_id repeats.
 
 export interface PromptArgument {
   name: string;
@@ -139,6 +139,18 @@ export const PROMPTS: JaffloopPrompt[] = [
     text:
       'For {{person}}, call Jaffloop get_person and search their items and said-log from the last {{months}} months. Summarise wins and growth areas as dated bullet points, quoting what was said where it exists. ' +
       'Mark anything you are unsure about, and do not invent anything that is not in the data. This is raw material for a performance review draft.',
+  },
+  {
+    id: 'build-my-team',
+    title: 'Set up my team',
+    description: 'Finds the people you manage from your calendar and org chart and saves each with position, relation and 1:1 cadence.',
+    needs: ['Outlook calendar', 'Outlook people / org chart'],
+    arguments: [{ name: 'months', description: 'How far back to look for recurring 1:1s', required: false, default: '3' }],
+    text:
+      'Help me set up Jaffloop with the people I work with. Look at my Outlook calendar for the last {{months}} months for recurring 1:1 meetings and at my org chart for my direct reports, my manager and close peers. ' +
+      'First call Jaffloop list_people so you do not touch people who are already there. For each new person call save_person with their handle (first name, or first.last when two people share a first name), full name, position (title), ' +
+      'relation (report, peer, manager or stakeholder), cadence_days from how often the 1:1 recurs (weekly 7, every two weeks 14, monthly 30) and their work email in match_emails. ' +
+      'Do not guess a birthday or start date. Show me the list you saved and mark anything you were unsure about.',
   },
 ];
 

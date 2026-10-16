@@ -32,7 +32,7 @@ export function fromDbDate(v: unknown): number {
 export const dateOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : fromDbDate(v));
 export const dbDateOrNull = (ms: number | null | undefined): string | null => (ms === null || ms === undefined ? null : toDbDate(ms));
 
-// ---- schema (copied from a database made by the Swift build; GRDB migrations "v1" and "v2-person-notes", then our "v3-person-dates" and "v4-external-ids") ----
+// ---- schema (copied from a database made by the Swift build; GRDB migrations "v1" and "v2-person-notes", then our "v3-person-dates", "v4-external-ids" and "v5-people-title-proposed") ----
 
 const V1 = `
 CREATE TABLE "people" ("id" TEXT PRIMARY KEY NOT NULL, "handle" TEXT NOT NULL UNIQUE, "name" TEXT NOT NULL, "relation" TEXT NOT NULL DEFAULT 'other', "cadence_days" INTEGER, "match_emails" TEXT NOT NULL DEFAULT '', "hidden_from_claude" BOOLEAN NOT NULL DEFAULT 0, "archived" BOOLEAN NOT NULL DEFAULT 0);
@@ -68,12 +68,17 @@ ALTER TABLE "items" ADD COLUMN "source_url" TEXT;
 ALTER TABLE "items" ADD COLUMN "interaction_id" TEXT;
 CREATE UNIQUE INDEX "items_external_id" ON "items"("external_id") WHERE "external_id" IS NOT NULL;`;
 
+// 0.4.0: position of a person (shown to Claude too) and items Claude proposed (wait in the Inbox until accepted).
+const V5 = `ALTER TABLE "people" ADD COLUMN "title" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "items" ADD COLUMN "proposed" BOOLEAN NOT NULL DEFAULT 0;`;
+
 /** In GRDB's order. Exported so tests can build a v1 database. */
 export const MIGRATIONS: ReadonlyArray<{ id: string; sql: string }> = [
   { id: 'v1', sql: V1 },
   { id: 'v2-person-notes', sql: V2 },
   { id: 'v3-person-dates', sql: V3 },
   { id: 'v4-external-ids', sql: V4 },
+  { id: 'v5-people-title-proposed', sql: V5 },
 ];
 
 /** Runs `fn` in a write transaction (BEGIN IMMEDIATE, like GRDB); joins an open one. */

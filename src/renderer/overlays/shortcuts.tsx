@@ -9,7 +9,7 @@ function groups(hotkey: string): Group[] {
   return [
     ['In lists', [['j  k  ↑  ↓', 'Move the selection'], ['⏎', 'Complete'], ['s', 'Snooze to tomorrow'], ['e', 'Edit the title'],
       ['space', 'Open or close details'], ['x', 'Mark for bulk actions'], ['p', 'Pin or unpin'], ['⌫', 'Drop'], ['esc', 'Clear marks, close details']]],
-    ['Inbox triage', [['p', 'Assign a person'], ['d  t  w', 'Due today, tomorrow, next week'], ['x', 'Drop']]],
+    ['Inbox triage', [['p', 'Assign a person'], ['d  t  w', 'Due today, tomorrow, next week'], ['x', 'Drop'], ['a  x', 'Accept or dismiss what Claude added']]],
     ['Anywhere', [[Fmt.hotkeyLabel(hotkey), 'Capture from any app'], ['⌘K', 'Search'], ['⌘P', 'Jump to a person'], ['⌘N', 'New capture'], ['⌘1 – 4', 'Today, Ledger, Inbox, People'],
       ['⌘[  ⌘]', 'Back and forward'], ['⌘\\', 'Hide or show the sidebar'], ['⌘Z', 'Undo while the toast shows'], ['?', 'This sheet']]],
     ['Capture bar', [['⏎', 'Save'], ['⌘⏎', 'Save and keep open'], ['tab', 'Complete an @person'], ['↑', 'Repeat the last capture'], ['esc', 'Cancel']]],

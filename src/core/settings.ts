@@ -6,7 +6,7 @@ export const DEFAULT_SETTINGS: Settings = {
   staleDaysAfterDue: 3, staleDaysNoDue: 5,
   mcpReadOnly: false, compact: false, sound: false, haptics: true,
   hotkey: 'Alt+Space',
-  jiraBaseUrl: '', captureTemplates: [],
+  jiraBaseUrl: '', captureTemplates: [], reviewClaudeItems: false,
 };
 
 /** "17:30" -> [17, 30] */

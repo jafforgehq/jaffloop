@@ -1,12 +1,14 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { HeatRow, PersonSummary } from '../../shared/types';
 import { AllClosed } from '../components/all-closed';
 import { Icon } from '../components/icons';
 import { Page } from '../components/page';
-import { CadenceRing, Chip, Dot, GhostButton, Segmented } from '../components/ui';
+import { PersonForm, createFromDraft } from '../components/person-form';
+import { CadenceRing, Chip, Dot, GhostButton, PrimaryButton, Segmented } from '../components/ui';
 import { Fmt } from '../core';
 import { useFetched } from '../hooks/use-fetched';
-import { addPerson, api, go, orderedPeople, person, summaries, ui } from '../model';
+import { addPerson, api, go, openOnboarding, orderedPeople, person, summaries, ui } from '../model';
+import { type PersonDraft, emptyDraft, titleLine } from '../onboarding-logic';
 import { lastOneOnOne, sortPeopleBy } from '../people-logic';
 import { heatWeekStarts, loadShares } from '../reports-logic';
 
@@ -52,8 +54,50 @@ function LoadBar({ share, owe, wait }: { share?: { owe: number; wait: number }; 
   );
 }
 
+/** "Add person…": the wizard's form in a dialog, one person, then it opens their page. */
+function AddPersonDialog({ onClose }: { onClose: () => void }) {
+  const [draft, setDraft] = useState<PersonDraft>(emptyDraft);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (busy || !draft.name.trim()) return;
+    setBusy(true);
+    const r = await createFromDraft(draft);
+    setBusy(false);
+    if ('error' in r) { setError(r.error); return; }
+    onClose();
+    go(`person:${r.person.id}`);
+  };
+  const latest = useRef(submit); // the key handler must see the form as it is now
+  latest.current = submit;
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); }
+      else if (e.key === 'Enter' && e.metaKey && !e.isComposing) { e.preventDefault(); void latest.current(); }
+    };
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
+  }, []);
+  return (
+    <div class="overlay center" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div class="card ob-card single" role="dialog" aria-label="Add person">
+        <div class="ob-main">
+          <h2 class="title" style={{ fontSize: 20 }}>Add person</h2>
+          <PersonForm draft={draft} onChange={(d) => { setDraft(d); if (error) setError(null); }} error={error} onSubmit={() => void submit()} />
+          <div class="row-flex gap8 ob-buttons">
+            <span class="grow" />
+            <GhostButton onClick={onClose}>Cancel</GhostButton>
+            <PrimaryButton onClick={() => void submit()} disabled={busy || !draft.name.trim()}>Add person</PrimaryButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PeoplePage() {
   const [name, setName] = useState('');
+  const [dialog, setDialog] = useState(false);
   const { peopleLayout: layout, peopleSort: sort, pinnedPeople } = ui.value;
   const people = sortPeopleBy(sort, summaries.value, orderedPeople.value);
   const load = loadShares(summaries.value);
@@ -73,6 +117,7 @@ export function PeoplePage() {
         <input class="input" style={{ width: 220 }} value={name} placeholder="Add a person…" aria-label="Add a person"
           onInput={(e) => setName((e.target as HTMLInputElement).value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.isComposing) void add(); }} />
         <GhostButton onClick={() => void add()}>Add</GhostButton>
+        <GhostButton onClick={() => setDialog(true)}>Add person…</GhostButton>
         <span class="grow" />
         <select class="input" style={{ width: 160 }} aria-label="Sort people" value={sort}
           onChange={(e) => void api.setUiState({ peopleSort: (e.target as HTMLSelectElement).value as typeof sort })}>
@@ -86,7 +131,12 @@ export function PeoplePage() {
         ]} />
       </div>
       <RhythmPanel />
-      {summaries.value.length === 0 && <AllClosed title="No one yet" message="Add the people you meet with. Typing @name in a capture adds them too." />}
+      {summaries.value.length === 0 && (
+        <AllClosed title="No one yet" message="Add the people you meet with. Typing @name in a capture adds them too." showCapture={false}>
+          <PrimaryButton onClick={openOnboarding}>Add your team</PrimaryButton>
+        </AllClosed>
+      )}
+      {dialog && <AddPersonDialog onClose={() => setDialog(false)} />}
       {layout === 'grid'
         ? <div class="people-grid">{people.map((s) => <Card key={s.person.id} s={s} pinned={pinnedPeople.includes(s.person.id)} share={load.get(s.person.id)} />)}</div>
         : <div class="people-list">{people.map((s) => <Row key={s.person.id} s={s} share={load.get(s.person.id)} />)}</div>}
@@ -100,7 +150,7 @@ function Row({ s, share }: { s: PersonSummary; share?: { owe: number; wait: numb
       <CadenceRing person={s.person} daysSince={s.daysSinceLast} overdue={s.cadenceOverdue} size={40} />
       <span class="grow" style={{ textAlign: 'left' }}>
         <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{s.person.name}</span>
-        <span class="mono dim" style={{ display: 'block' }}>{s.person.relation}</span>
+        <span class="mono dim ellipsis" style={{ display: 'block' }}>{titleLine(s.person)}</span>
       </span>
       <span class={s.cadenceOverdue ? 'clay' : 'dim'} style={{ fontSize: 12 }}>{lastOneOnOne(s.daysSinceLast)}</span>
       <span class="load-cell">
@@ -118,7 +168,7 @@ function Card({ s, pinned, share }: { s: PersonSummary; pinned: boolean; share?:
         <CadenceRing person={s.person} daysSince={s.daysSinceLast} overdue={s.cadenceOverdue} size={46} />
         <span class="grow" style={{ textAlign: 'left' }}>
           <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.person.name}</span>
-          <span class="mono dim" style={{ display: 'block' }}>{s.person.relation}</span>
+          <span class="mono dim ellipsis" style={{ display: 'block' }}>{titleLine(s.person)}</span>
         </span>
         {pinned && <span class="dim"><Icon name="pin" size={11} /></span>}
       </span>

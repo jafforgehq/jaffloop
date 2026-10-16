@@ -39,12 +39,16 @@ export interface Item {
   sourceUrl: string | null;
   /** the 1:1 (Interaction id) this item was recorded in, so the 1:1 history can list its action items */
   interactionId: string | null;
+  /** added by Claude (MCP) while "Review what Claude adds" is on: waits in the Inbox for Accept or Dismiss, and is left out of Today, counts and notifications until accepted */
+  proposed: boolean;
 }
 
 export interface Person {
   id: string;
   handle: string;
   name: string;
+  /** position / job title, e.g. 'Staff engineer'; empty when unknown (shown with the name, also visible to Claude) */
+  title: string;
   relation: Relation;
   cadenceDays: number | null;
   /** comma separated */
@@ -112,6 +116,8 @@ export interface Settings {
   jiraBaseUrl: string;
   /** capture templates, stored as JSON in the settings table */
   captureTemplates: CaptureTemplate[];
+  /** items Claude adds over MCP wait in the Inbox as proposals until you accept them (default off) */
+  reviewClaudeItems: boolean;
 }
 
 /** `prep @sara` expands to the template's lines with {person} replaced by the handle and {rest} by the text after the person. */
@@ -135,6 +141,10 @@ export interface ItemFilter {
   /** exact match on Item.externalId */
   externalId?: string;
   includeSnoozed?: boolean;
+  /** proposed items are left out unless this is true */
+  includeProposed?: boolean;
+  /** only proposed items */
+  proposedOnly?: boolean;
   limit?: number;
 }
 
@@ -181,6 +191,8 @@ export interface Snapshot {
   auditLog: AuditEntry[];
   /** number of snoozed open items (sidebar badge) */
   snoozedCount: number;
+  /** open items Claude proposed, newest first (not part of openItems or today) */
+  proposed: Item[];
   /** wall clock of the main process at the time of the snapshot */
   now: number;
 }

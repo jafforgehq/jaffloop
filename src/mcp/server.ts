@@ -5,10 +5,10 @@ import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Interaction, InteractionKind, Item, ItemFilter, ItemKind, ItemStatus, Person, PersonSummary } from '../shared/types';
-import { ITEM_KINDS } from '../shared/types';
+import { ITEM_KINDS, RELATIONS } from '../shared/types';
 import { addDays } from '../core/calendar';
 import { openDatabase } from '../core/db';
-import { newItem } from '../core/models';
+import { nameFromHandle, newItem, newPerson } from '../core/models';
 import { parseCapture } from '../core/parser';
 import { isOverdue, isSlipping, isStaleWait } from '../core/rules';
 import { hm } from '../core/settings';
@@ -21,7 +21,7 @@ export const mcpServerVersion: string = typeof __JAFFLOOP_VERSION__ === 'string'
 
 type J = Record<string, unknown>;
 
-const WRITE_TOOLS = new Set(['capture', 'add_item', 'add_items', 'complete_item', 'snooze_item', 'update_item', 'log_interaction']);
+const WRITE_TOOLS = new Set(['capture', 'add_item', 'add_items', 'complete_item', 'snooze_item', 'update_item', 'log_interaction', 'save_person']);
 const INTERACTION_KINDS: InteractionKind[] = ['1on1', 'meeting', 'chat', 'other'];
 const STATUSES: ItemStatus[] = ['open', 'done', 'dropped'];
 const MAX_BULK_ITEMS = 100;
@@ -251,6 +251,7 @@ export class MCPServer {
     if (i.body !== null) d.body = i.body;
     if (i.quote !== null) d.quote = i.quote;
     if (i.dueAt !== null) { d.due = i.dueHasTime ? isoString(i.dueAt) : this.dayString(i.dueAt); d.overdue = isOverdue(i, now); }
+    if (i.proposed) d.proposed = true;
     if (i.externalId !== null) d.external_id = i.externalId;
     if (i.sourceLabel !== null) d.source_label = i.sourceLabel;
     if (i.sourceUrl !== null) d.source_url = i.sourceUrl;
@@ -270,6 +271,7 @@ export class MCPServer {
       handle: s.person.handle, name: s.person.name, relation: s.person.relation, open_i_owe: s.openOwe, open_they_owe: s.openWait,
       cadence_overdue: s.cadenceOverdue, archived: s.person.archived,
     };
+    if (s.person.title !== '') d.title = s.person.title;
     if (s.person.cadenceDays !== null) d.cadence_days = s.person.cadenceDays;
     if (s.lastInteraction !== null) d.last_interaction = isoString(s.lastInteraction);
     if (s.daysSinceLast !== null) d.days_since_last_interaction = s.daysSinceLast;
@@ -300,7 +302,7 @@ export class MCPServer {
       kind, title, body: asStr(a.body) ?? null, quote: asStr(a.quote) ?? null, personId: p?.id ?? null, dueAt: due,
       dueHasTime: asStr(a.due)?.includes(':') ?? false, remindAt: this.date(a.remind_at),
       inbox: due === null && p === null && (['task', 'owe', 'wait', 'bring'] as ItemKind[]).includes(kind), source: 'mcp', now: t,
-      recurRule: asStr(a.recurrence) ?? null, ...this.origin(a, interactionId),
+      recurRule: asStr(a.recurrence) ?? null, ...this.origin(a, interactionId), proposed: this.store.settings().reviewClaudeItems,
     });
     return { r: this.store.insertOnce(item, asStrings(a.tags) ?? []), kind, title };
   }
@@ -334,9 +336,9 @@ export class MCPServer {
         if (parsed.personHandle !== null && store.person(parsed.personHandle, false)?.hiddenFromClaude) {
           throw new MCPError(`No person with handle '${parsed.personHandle}'.`);
         }
-        const origin = this.origin(a);
+        const origin = { ...this.origin(a), proposed: store.settings().reviewClaudeItems };
         if (origin.externalId === null && origin.sourceLabel === null && origin.sourceUrl === null) {
-          const i = store.create(parsed, 'mcp', t);
+          const i = store.create(parsed, 'mcp', t, { proposed: origin.proposed });
           return [this.itemJSON(i), `capture: ${i.kind} "${i.title}"`];
         }
         const r = store.createOnce(parsed, 'mcp', t, origin);
@@ -355,7 +357,7 @@ export class MCPServer {
         return [out, `add_items: ${out.created} created, ${out.duplicates} duplicate, ${out.errors} error`, (out.created as number) > 0];
       }
       case 'list_items': {
-        const f: ItemFilter = { includeSnoozed: true, limit: asInt(a.limit) ?? 50 };
+        const f: ItemFilter = { includeSnoozed: true, includeProposed: true, limit: asInt(a.limit) ?? 50 };
         const k = asStr(a.kind);
         if (k !== undefined) f.kinds = inList(ITEM_KINDS, k) ? [k as ItemKind] : [];
         const p = this.personFor(a.person);
@@ -432,6 +434,7 @@ export class MCPServer {
         }
         return [out, `log_interaction: ${p.handle}`];
       }
+      case 'save_person': return this.savePerson(a, t);
       case 'search': {
         const q = asStr(a.query);
         if (q === undefined) throw new MCPError('query is required');
@@ -466,6 +469,79 @@ export class MCPServer {
     }
   }
 
+  /** Upsert by handle; only the fields that are present change. Validates everything before writing. Notes and hidden_from_claude are not writable here. */
+  private savePerson(a: J, t: number): [unknown, string] {
+    const raw = asStr(a.handle)?.trim().replace(/^@/, '').toLowerCase();
+    if (!raw) throw new MCPError('handle is required');
+    if (!/^[\p{L}\p{N}_.-]+$/u.test(raw)) throw new MCPError("handle may only contain letters, digits, '.', '_' and '-'");
+    const has = (k: string): boolean => a[k] !== undefined;
+    const cleared = (v: unknown): boolean => v === null || v === '';
+    const text = (k: string): string | undefined => {
+      if (!has(k)) return undefined;
+      if (a[k] === null) return '';
+      const v = asStr(a[k]);
+      if (v === undefined) throw new MCPError(`${k} must be a string`);
+      return v.trim();
+    };
+    const name = text('name');
+    if (name === '') throw new MCPError('name must not be empty');
+    const title = text('title');
+    let relation: Person['relation'] | undefined;
+    if (has('relation')) {
+      relation = inList(RELATIONS, a.relation);
+      if (!relation) throw new MCPError(`relation must be one of ${RELATIONS.join(', ')}`);
+    }
+    let cadence: number | null | undefined;
+    if (has('cadence_days')) {
+      const v = a.cadence_days;
+      if (v === null || v === 0) cadence = null;
+      else if (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 90) cadence = v;
+      else throw new MCPError('cadence_days must be an integer from 1 to 90, or null to clear it');
+    }
+    let emails: string | undefined;
+    if (has('match_emails')) {
+      const v = text('match_emails')!;
+      emails = v.split(',').map((e) => e.trim()).filter((e) => e !== '').join(', ');
+    }
+    let start: string | null | undefined;
+    if (has('start_date')) {
+      if (cleared(a.start_date)) start = null;
+      else {
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asStr(a.start_date)?.trim() ?? '');
+        const d = m ? new Date(+m[1]!, +m[2]! - 1, +m[3]!) : null;
+        if (!m || !d || d.getFullYear() !== +m[1]! || d.getMonth() !== +m[2]! - 1 || d.getDate() !== +m[3]!) throw new MCPError("start_date must be a real date as 'YYYY-MM-DD'");
+        start = m[0];
+      }
+    }
+    let birthday: string | null | undefined;
+    if (has('birthday')) {
+      if (cleared(a.birthday)) birthday = null;
+      else {
+        const m = /^(?:\d{4}-)?(\d{2})-(\d{2})$/.exec(asStr(a.birthday)?.trim() ?? '');
+        const ok = m && new Date(2000, +m[1]! - 1, +m[2]!).getMonth() === +m[1]! - 1 && new Date(2000, +m[1]! - 1, +m[2]!).getDate() === +m[2]!; // 2000 is a leap year: 02-29 is valid
+        if (!m || !ok) throw new MCPError("birthday must be a real date as 'MM-DD' or 'YYYY-MM-DD'");
+        birthday = `${m[1]}-${m[2]}`;
+      }
+    }
+    let archived: boolean | undefined;
+    if (has('archived')) {
+      archived = typeof a.archived === 'boolean' ? a.archived : undefined;
+      if (archived === undefined) throw new MCPError('archived must be true or false');
+    }
+    const existing = this.store.person(raw, false);
+    if (existing?.hiddenFromClaude) throw new MCPError(`No person with handle '${raw}'.`);
+    const base = existing ?? newPerson({ handle: raw, name: nameFromHandle(raw) });
+    const next: Person = {
+      ...base,
+      ...(name !== undefined && { name }), ...(title !== undefined && { title }), ...(relation !== undefined && { relation }),
+      ...(cadence !== undefined && { cadenceDays: cadence }), ...(emails !== undefined && { matchEmails: emails }),
+      ...(start !== undefined && { startDate: start }), ...(birthday !== undefined && { birthday }), ...(archived !== undefined && { archived }),
+    };
+    this.store.savePerson(next);
+    const summary = this.store.personSummaries(t, true).find((s) => s.person.id === next.id)!;
+    return [{ ...this.personJSON(summary), created: existing === null }, `save_person: ${raw}`];
+  }
+
   private personDetail(p: Person): J {
     const t = this.now();
     const store = this.store;
@@ -485,7 +561,7 @@ export class MCPServer {
   private prepBrief(p: Person): J {
     const full = this.personDetail(p);
     const d: J = {};
-    for (const k of ['handle', 'name', 'relation', 'last_interaction', 'days_since_last_interaction', 'cadence_days', 'cadence_overdue',
+    for (const k of ['handle', 'name', 'title', 'relation', 'last_interaction', 'days_since_last_interaction', 'cadence_days', 'cadence_overdue',
       'i_owe_them', 'they_owe_me', 'bring_up', 'said_log', 'recent_interactions']) {
       if (full[k] !== undefined) d[k] = full[k];
     }
@@ -560,6 +636,7 @@ const TOOL_DEFS: J[] = [
   tool('snooze_item', 'Hide an item until a time.', { id: str, until: s("ISO date/time or phrase like 'tomorrow 9:00'") }, ['id', 'until']),
   tool('update_item', 'Change fields on an item (title, body, quote, kind, status, pinned, person, due, remind_at, tags).', { id: str, fields: { type: 'object' } }, ['id', 'fields']),
   tool('log_interaction', 'Record a 1:1 or meeting with a person. Optional action_items (up to 100, same fields as add_item incl. external_id) are created and linked to this interaction, so they show in the 1:1 history; person defaults to this person, duplicates by external_id are skipped.', { person: s('Person handle'), kind: { type: 'string', enum: ['1on1', 'meeting', 'chat', 'other'] }, notes: str, occurred_at: s('ISO date/time, defaults to now'), action_items: { type: 'array', maxItems: MAX_BULK_ITEMS, items: { type: 'object', properties: { ...ITEM_FIELDS, ...SOURCE_FIELDS }, required: ['kind', 'title'] } } }, ['person']),
+  tool('save_person', 'Create or update a person by handle; only the fields you pass are changed. Use it to set up or correct people (for example from the org chart or your calendar): call list_people first so you do not overwrite what the user already entered, and never invent birthdays or start dates. Notes and the hidden-from-Claude flag cannot be written. Returns the person as list_people shows them plus `created`.', { handle: s("Person handle, e.g. 'sara' or 'sara.lee' (lowercase letters, digits, . _ -)"), name: s('Full name; a new person without one gets a name made from the handle'), title: s("Position, e.g. 'Staff engineer'; empty string clears it"), relation: { type: 'string', enum: ['report', 'peer', 'manager', 'stakeholder', 'other'] }, cadence_days: { type: ['integer', 'null'], minimum: 0, maximum: 90, description: 'Days between 1:1s (1-90); null or 0 clears it' }, match_emails: s('Work email addresses, comma separated; used to match meeting invites'), start_date: s("Start date 'YYYY-MM-DD' (private: never shown back)"), birthday: s("'MM-DD' or 'YYYY-MM-DD' (private: never shown back)"), archived: { type: 'boolean' } }, ['handle']),
   tool('search', 'Full-text search over titles, bodies and quotes.', { query: str, filters: { type: 'object', properties: { kind: str, person: str, before: str, status: str } } }, ['query']),
   tool('prep_brief', 'Structured data to prepare a conversation: open items both ways, talking points, recent said entries, cadence.', { person: s('Person handle') }, ['person']),
   tool('week_summary', 'Created, completed, slipped and stale items for a range (defaults to the last 7 days).', { from: s('ISO date'), to: s('ISO date') }),

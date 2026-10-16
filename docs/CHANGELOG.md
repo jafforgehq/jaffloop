@@ -2,6 +2,13 @@
 
 Also shown inside the app (What's new). Newest first.
 
+## 0.4.0 (2026-10-16): Add your team, positions, save_person and review what Claude adds
+
+- Add your team: a short guided setup (name, position, relation, 1:1 cadence, birthday, start date, work email) on first run, from the People page and from Settings. Change anything later on the person page.
+- People now have a position (job title), shown next to the name on the person page, the people list, the brief and in the ⌘P picker.
+- Claude can create and correct people over MCP with a new save_person tool, and an eleventh prompt, Set up my team, builds your list from your calendar and org chart. Birthdays and notes stay private.
+- Review what Claude adds: switch it on in Settings → Claude (MCP) and everything Claude adds waits in the Inbox with Accept and Dismiss. Dismissed items are not imported again.
+
 ## 0.3.1 (2026-10-16): Smoother completing
 
 - Fixes freezes: completing an item no longer lags, and the app menu (Settings…) and menu bar stay clickable.

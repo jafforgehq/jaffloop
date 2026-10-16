@@ -605,3 +605,26 @@ a.tlink:hover { text-decoration-thickness: 1px; }
 .theme-prev-row { display: flex; align-items: center; gap: 4px; padding: 2px 3px; border-radius: 3px; }
 .theme-name { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 0 2px; font-size: 11.5px; min-width: 0; }
 .theme-check { color: var(--accent); font-weight: 700; flex: none; }
+
+/* ===== 0.4.0: onboarding, person form, proposed items ===== */
+.ob-card { width: 760px; max-width: calc(100% - 40px); max-height: calc(100% - 40px); display: flex; overflow: hidden; border-radius: 18px; }
+.ob-card.single { width: 420px; }
+.ob-main { flex: 1; min-width: 0; padding: 24px 26px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.ob-side { width: 230px; flex: none; padding: 24px 20px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); border-left: 0.5px solid var(--hairline); overflow-y: auto; }
+.ob-buttons { margin-top: 4px; }
+.ob-added { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.ob-tick { width: 18px; height: 18px; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--accent); color: var(--bg); }
+.ob-name { display: block; font-weight: 500; }
+.ob-title { display: block; font-size: 11.5px; }
+.pform { display: flex; flex-direction: column; gap: 10px; }
+.pf-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text2); }
+.pf-field .input { color: var(--text); }
+.pf-opt { font-size: 11px; margin-left: 4px; }
+.pf-days { min-width: 78px; text-align: center; font-size: 12px; }
+.pf-error { font-size: 12px; color: var(--clay); margin-top: -4px; }
+
+.review-card { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 8px 12px; border-radius: 10px; font-size: 12.5px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent); border: 0.5px solid color-mix(in srgb, var(--accent) 40%, var(--hairline)); }
+.row.proposal { cursor: default; }
+.row.proposal .btn { white-space: nowrap; }
+.proposals .section-head .btn { padding: 2px 8px; font-size: 11.5px; }

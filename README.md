@@ -20,7 +20,7 @@ Capture in one line. Everything stays on your Mac. Claude can read and write you
 - **Weekly review** with your kept-promise rate and a one-click Markdown status update, a rhythm grid of 1:1s, workload bars, anniversaries and birthdays, capture templates, Jira links, and a Dock badge.
 - **Local notifications** with Done / Snooze actions, quiet hours, and batching.
 - **What's new and roadmap** inside the app, shown once after you update. See also [`docs/CHANGELOG.md`](docs/CHANGELOG.md) and [`docs/ROADMAP.md`](docs/ROADMAP.md).
-- **MCP server** (`jaffloop-mcp`) with 12 tools and 3 resources, a read-only mode, per-person hiding, and an audit log.
+- **MCP server** (`jaffloop-mcp`) with 14 tools, 11 prompts and 3 resources, a read-only mode, per-person hiding, and an audit log.
 
 | Capture | Inbox |
 | --- | --- |
@@ -61,6 +61,10 @@ Capture in one line. Everything stays on your Mac. Claude can read and write you
 | 1:1 history with notes and action items | Claude prompts (Copy) |
 | --- | --- |
 | ![1:1 history](docs/screenshots/person-history.png) | ![Claude prompts](docs/screenshots/settings-prompts.png) |
+
+| Add your team (onboarding) | Review what Claude adds |
+| --- | --- |
+| ![Add your team](docs/screenshots/wizard-two-added.png) | ![Inbox proposals](docs/screenshots/inbox-proposals.png) |
 
 | Jump to a person (⌘P) | Seven themes |
 | --- | --- |
@@ -142,7 +146,9 @@ For Claude Desktop, add the same binary as a stdio server in its MCP config. The
 
 Tools: `capture`, `add_item`, `add_items`, `list_items`, `get_person`, `list_people`, `complete_item`, `snooze_item`, `update_item`, `log_interaction`, `search`, `prep_brief`, `week_summary`. Resources: `jaffloop://today`, `jaffloop://ledger`, `jaffloop://person/{handle}`.
 
-Ready-made prompts: the server also offers ten prompts (a Monday sweep of what you promised, Jira mentions, meeting notes to items, a 1:1 prep, a Friday status and more). In Claude Code they appear as slash commands named `/mcp__jaffloop__<id>`, in Claude Desktop under the + menu. Settings, then Claude (MCP), lists them with a Copy button for any other chat.
+Adding people: the first-run welcome, the People page and Settings all open "Add your team" (name, position, relation, 1:1 cadence, birthday, start date, work email). Claude can do the same with the `save_person` tool, and the "Set up my team" prompt builds the list from your calendar and org chart. Turn on Settings, then Claude (MCP), then "Review what Claude adds first" and everything Claude adds waits in the Inbox for Accept or Dismiss.
+
+Ready-made prompts: the server also offers eleven prompts (a Monday sweep of what you promised, Jira mentions, meeting notes to items, a 1:1 prep, a Friday status and more). In Claude Code they appear as slash commands named `/mcp__jaffloop__<id>`, in Claude Desktop under the + menu. Settings, then Claude (MCP), lists them with a Copy button for any other chat.
 
 Imports never duplicate: `add_item`, `add_items` (up to 100 items in one call) and `capture` take an optional `external_id` (for example `outlook:<message id>` or `jira:PLAT-482:<comment id>`), plus `source_label` and `source_url`. An item whose `external_id` already exists, open, done or dropped, is skipped and reported as a duplicate, so running a sweep twice creates no copies. The item drawer shows the source as a chip that opens the link. `log_interaction` also takes `action_items`, which are created and linked to that 1:1.
 

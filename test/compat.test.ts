@@ -19,7 +19,7 @@ function copyFixture(name: string): string {
 const schema = (db: DatabaseSync) => (db.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all());
 const migrations = (db: DatabaseSync) => (db.prepare('SELECT identifier FROM grdb_migrations ORDER BY identifier').all() as Array<{ identifier: string }>).map((r) => r.identifier);
 
-const ALL_MIGRATIONS = ['v1', 'v2-person-notes', 'v3-person-dates', 'v4-external-ids'];
+const ALL_MIGRATIONS = ['v1', 'v2-person-notes', 'v3-person-dates', 'v4-external-ids', 'v5-people-title-proposed'];
 const hasSqlite3 = spawnSync('sqlite3', ['--version']).status === 0;
 // the sqlite3 CLI on some machines (GitHub's macOS runners) is built without FTS5
 const cliHasFts5 = hasSqlite3 && spawnSync('sqlite3', [':memory:', 'create virtual table t using fts5(a)']).status === 0;
@@ -44,14 +44,15 @@ describe('GRDB dates', () => {
 const V4_ALTERS = `ALTER TABLE "items" ADD COLUMN "external_id" TEXT; ALTER TABLE "items" ADD COLUMN "source_label" TEXT; ALTER TABLE "items" ADD COLUMN "source_url" TEXT;
   ALTER TABLE "items" ADD COLUMN "interaction_id" TEXT; CREATE UNIQUE INDEX "items_external_id" ON "items"("external_id") WHERE "external_id" IS NOT NULL`;
 
-/** The Swift v2 fixture plus the 0.2.0 and 0.3.0 columns, as ALTER TABLE leaves them: what every database must look like now. */
-function v4Schema(): ReturnType<typeof schema> {
+/** The Swift v2 fixture plus the 0.2.0, 0.3.0 and 0.4.0 columns, as ALTER TABLE leaves them: what every database must look like now. */
+function currentSchema(): ReturnType<typeof schema> {
   const db = new DatabaseSync(':memory:');
   const fixture = new DatabaseSync(join(FIX, 'swift-v2.sqlite'), { readOnly: true });
   for (const r of fixture.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'items_fts_%' ORDER BY rowid").all() as Array<{ sql: string }>) db.exec(r.sql);
   fixture.close();
   db.exec('ALTER TABLE "people" ADD COLUMN "start_date" TEXT; ALTER TABLE "people" ADD COLUMN "birthday" TEXT');
   db.exec(V4_ALTERS);
+  db.exec(`ALTER TABLE "people" ADD COLUMN "title" TEXT NOT NULL DEFAULT ''; ALTER TABLE "items" ADD COLUMN "proposed" BOOLEAN NOT NULL DEFAULT 0`);
   const out = schema(db);
   db.close();
   return out;
@@ -97,14 +98,14 @@ describe('opening a database made by the Swift app (v2)', () => {
     expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
     db.close();
   });
-  it('only adds the v3 person columns and the v4 item columns to the schema, and keeps all data', () => {
+  it('only adds the v3 to v5 columns to the schema, and keeps all data', () => {
     const fixture = new DatabaseSync(join(FIX, 'swift-v2.sqlite'), { readOnly: true });
     const before = fixture.prepare('SELECT * FROM people ORDER BY id').all() as Array<Record<string, unknown>>;
     const nItems = (fixture.prepare('SELECT COUNT(*) c FROM items').get() as { c: number }).c;
     fixture.close();
     const db = openDatabase(copyFixture('swift-v2.sqlite'));
-    expect(schema(db)).toEqual(v4Schema());
-    expect(db.prepare('SELECT * FROM people ORDER BY id').all()).toEqual(before.map((p) => ({ ...p, start_date: null, birthday: null })));
+    expect(schema(db)).toEqual(currentSchema());
+    expect(db.prepare('SELECT * FROM people ORDER BY id').all()).toEqual(before.map((p) => ({ ...p, start_date: null, birthday: null, title: '' })));
     expect(db.prepare('SELECT COUNT(*) c FROM items').get()).toEqual({ c: nItems });
     expect(db.prepare('SELECT COUNT(*) c FROM items WHERE external_id IS NOT NULL OR source_label IS NOT NULL OR source_url IS NOT NULL OR interaction_id IS NOT NULL').get()).toEqual({ c: 0 });
     db.close();
@@ -142,7 +143,7 @@ describe('migrating a v1 database', () => {
     const p = store.person('sara')!; p.notes = 'hello'; store.savePerson(p);
     expect(store.person('sara')!.notes).toBe('hello');
     // the ALTERs we run produce exactly the DDL GRDB produced, plus our columns
-    expect(schema(db)).toEqual(v4Schema());
+    expect(schema(db)).toEqual(currentSchema());
     db.close();
   });
   it('a v2 database (as the 0.1.0 app left it) moves to v3 with its people intact', () => {
@@ -175,7 +176,7 @@ describe('migrating to v4 (0.3.0)', () => {
     const store = new Store(migrated);
     expect(store.item('I1')).toMatchObject({ title: 'keep me', personId: 'P1', externalId: null, sourceLabel: null, sourceUrl: null, interactionId: null });
     expect(store.person('sara', false)).toMatchObject({ startDate: '2024-03-04' });
-    expect(schema(migrated)).toEqual(v4Schema());
+    expect(schema(migrated)).toEqual(currentSchema());
     migrated.close();
   });
   it('the same database opened by two processes at once migrates once', () => {
@@ -201,7 +202,7 @@ describe('a new database', () => {
   it('has the same schema as a migrated Swift database, with every migration recorded', () => {
     const db = openDatabase(join(dir, 'sub', 'dir', 'new.sqlite'));    // creates the directories
     const fixture = new DatabaseSync(join(FIX, 'swift-v2.sqlite'), { readOnly: true });
-    expect(schema(db)).toEqual(v4Schema());
+    expect(schema(db)).toEqual(currentSchema());
     expect(migrations(db)).toEqual(ALL_MIGRATIONS);
     expect(MIGRATIONS.map((m) => m.id).sort()).toEqual(ALL_MIGRATIONS);
     expect(db.prepare('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'wal' });
@@ -263,7 +264,7 @@ describe.skipIf(!hasSqlite3)('rows we write, read through the sqlite3 CLI', () =
     expect(q('SELECT event, detail, at FROM item_events ORDER BY id')).toBe('created|mcp|2026-10-14 10:00:00.123\nsnoozed|2026-10-20T09:00:00Z|2026-10-14 10:00:00.123');
     expect(q("SELECT key, value FROM settings WHERE key IN ('eodTime','hotkey') ORDER BY key")).toBe('eodTime|16:00\nhotkey|Alt+Space');
     expect(q('SELECT tag FROM item_tags')).toBe('rfc');
-    expect(q('SELECT identifier FROM grdb_migrations ORDER BY identifier')).toBe('v1\nv2-person-notes\nv3-person-dates\nv4-external-ids');
+    expect(q('SELECT identifier FROM grdb_migrations ORDER BY identifier')).toBe('v1\nv2-person-notes\nv3-person-dates\nv4-external-ids\nv5-people-title-proposed');
     expect(q('PRAGMA integrity_check')).toBe('ok');
     if (cliHasFts5) expect(q("SELECT COUNT(*) FROM items WHERE rowid IN (SELECT rowid FROM items_fts WHERE items_fts MATCH '\"rev\"*')")).toBe('1');
   });

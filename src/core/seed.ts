@@ -17,19 +17,19 @@ export function seed(store: Store, now: number = Date.now()): void {
   };
 
   const person = (handle: string, name: string, relation: Relation, cadenceDays: number | null, last: number | null, matchEmails = '',
-    dates: { startDate?: string; birthday?: string } = {}): Person => {
-    const p = newPerson({ handle, name, relation, cadenceDays, matchEmails, ...dates });
+    dates: { startDate?: string; birthday?: string } = {}, title = ''): Person => {
+    const p = newPerson({ handle, name, relation, cadenceDays, matchEmails, title, ...dates });
     store.savePerson(p);
     if (last !== null) store.logInteraction(p.id, '1on1', null, ago(last));
     return p;
   };
   // a work anniversary in 3 days (2 years) and a birthday tomorrow, so the dates chips have something to show
   // Sara's 1:1s are logged below with notes (the latest 23 days ago, which the e2e tests rely on)
-  const sara = person('sara', 'Sara Lindqvist', 'report', 14, null, 'sara@example.com', { startDate: ymd(day(3), 2) });
-  const amir = person('amir', 'Amir Haddad', 'report', 7, 5, 'amir@example.com', { birthday: ymd(day(1)).slice(5) });
-  const maya = person('maya', 'Maya Chen', 'peer', null, 12);
-  const jonas = person('jonas', 'Jonas Weber', 'stakeholder', 30, 9);
-  person('priya', 'Priya Nair', 'report', 14, 6);
+  const sara = person('sara', 'Sara Lindqvist', 'report', 14, null, 'sara@example.com', { startDate: ymd(day(3), 2) }, 'Staff engineer');
+  const amir = person('amir', 'Amir Haddad', 'report', 7, 5, 'amir@example.com', { birthday: ymd(day(1)).slice(5) }, 'Senior engineer');
+  const maya = person('maya', 'Maya Chen', 'peer', null, 12, '', {}, 'Product manager');
+  const jonas = person('jonas', 'Jonas Weber', 'stakeholder', 30, 9, '', {}, 'Engineering manager');
+  person('priya', 'Priya Nair', 'report', 14, 6, '', {}, 'Junior engineer');
 
   interface Opts {
     due?: number | null; time?: boolean; created?: number; snoozes?: number; pinned?: boolean; quote?: string; inbox?: boolean; tags?: string[];

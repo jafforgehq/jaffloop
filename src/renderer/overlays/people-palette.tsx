@@ -50,7 +50,7 @@ function Palette() {
             <div key={s.person.id} role="option" aria-selected={idx === at} class={`palette-row people-row ${idx === at ? 'on' : ''}`}
               onMouseDown={(e) => e.preventDefault()} onMouseMove={() => setSel(idx)} onClick={() => open(s.person.id)}>
               <Avatar person={s.person} size={20} />
-              <span class="grow palette-title">{s.person.name}</span>
+              <span class="grow palette-title">{s.person.name}{s.person.title && <span class="dim" style={{ fontSize: 11.5, marginLeft: 8 }}>{s.person.title}</span>}</span>
               <span class="mono dim" style={{ fontSize: 11.5 }}>{lastOneOnOne(s.daysSinceLast)}</span>
               <span class={`mono ${s.openOwe + s.openWait ? '' : 'dim'}`} style={{ fontSize: 11.5, minWidth: 92, textAlign: 'right' }}>{s.openOwe} owe · {s.openWait} wait</span>
             </div>

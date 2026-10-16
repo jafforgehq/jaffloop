@@ -20,6 +20,8 @@ export interface ItemOrigin {
   sourceLabel?: string | null;
   sourceUrl?: string | null;
   interactionId?: string | null;
+  /** waits in the Inbox for Accept or Dismiss (set for items Claude adds while `reviewClaudeItems` is on) */
+  proposed?: boolean;
 }
 
 /** `duplicate: true` means an item with that external id already existed: `item` is that one and nothing was written. */
@@ -48,6 +50,7 @@ function itemFromRow(r: Row): Item {
     createdAt: dateOrNull(r.created_at)!, updatedAt: dateOrNull(r.updated_at)!, completedAt: dateOrNull(r.completed_at),
     lastTouchedAt: dateOrNull(r.last_touched_at)!,
     externalId: strOrNull(r.external_id), sourceLabel: strOrNull(r.source_label), sourceUrl: strOrNull(r.source_url), interactionId: strOrNull(r.interaction_id),
+    proposed: bool(r.proposed),
   };
 }
 
@@ -55,7 +58,7 @@ function personFromRow(r: Row): Person {
   return {
     id: str(r.id), handle: str(r.handle), name: str(r.name), relation: str(r.relation) as Relation, cadenceDays: intOrNull(r.cadence_days),
     matchEmails: str(r.match_emails), hiddenFromClaude: bool(r.hidden_from_claude), archived: bool(r.archived), notes: str(r.notes ?? ''),
-    startDate: strOrNull(r.start_date), birthday: strOrNull(r.birthday),
+    startDate: strOrNull(r.start_date), birthday: strOrNull(r.birthday), title: str(r.title ?? ''),
   };
 }
 
@@ -70,17 +73,17 @@ const auditFromRow = (r: Row): AuditEntry => ({ id: int(r.id), at: dateOrNull(r.
 
 const ITEM_COLS = ['id', 'kind', 'title', 'body', 'quote', 'person_id', 'status', 'due_at', 'due_has_time', 'remind_at', 'snoozed_until',
   'snooze_count', 'recur_rule', 'pinned', 'inbox', 'source', 'created_at', 'updated_at', 'completed_at', 'last_touched_at',
-  'external_id', 'source_label', 'source_url', 'interaction_id'];
+  'external_id', 'source_label', 'source_url', 'interaction_id', 'proposed'];
 
 function itemParams(i: Item): SQLInputValue[] {
   return [i.id, i.kind, i.title, i.body, i.quote, i.personId, i.status, dbDateOrNull(i.dueAt), i.dueHasTime ? 1 : 0, dbDateOrNull(i.remindAt),
     dbDateOrNull(i.snoozedUntil), i.snoozeCount, i.recurRule, i.pinned ? 1 : 0, i.inbox ? 1 : 0, i.source, toDbDate(i.createdAt),
-    toDbDate(i.updatedAt), dbDateOrNull(i.completedAt), toDbDate(i.lastTouchedAt), i.externalId, i.sourceLabel, i.sourceUrl, i.interactionId];
+    toDbDate(i.updatedAt), dbDateOrNull(i.completedAt), toDbDate(i.lastTouchedAt), i.externalId, i.sourceLabel, i.sourceUrl, i.interactionId, i.proposed ? 1 : 0];
 }
 
-const PERSON_COLS = ['id', 'handle', 'name', 'relation', 'cadence_days', 'match_emails', 'hidden_from_claude', 'archived', 'notes', 'start_date', 'birthday'];
+const PERSON_COLS = ['id', 'handle', 'name', 'relation', 'cadence_days', 'match_emails', 'hidden_from_claude', 'archived', 'notes', 'start_date', 'birthday', 'title'];
 function personParams(p: Person): SQLInputValue[] {
-  return [p.id, p.handle, p.name, p.relation, p.cadenceDays, p.matchEmails, p.hiddenFromClaude ? 1 : 0, p.archived ? 1 : 0, p.notes, p.startDate, p.birthday];
+  return [p.id, p.handle, p.name, p.relation, p.cadenceDays, p.matchEmails, p.hiddenFromClaude ? 1 : 0, p.archived ? 1 : 0, p.notes, p.startDate, p.birthday, p.title];
 }
 
 /** Reads the JSON stored under `captureTemplates`; anything malformed becomes [] (or drops the bad entries). */
@@ -126,6 +129,7 @@ export class Store {
         sound: d.get('sound') === '1', haptics: d.has('haptics') ? d.get('haptics') === '1' : true,
         hotkey: hotkeyToAccelerator(d.get('hotkey') ?? s.hotkey),
         jiraBaseUrl: d.get('jiraBaseUrl') ?? s.jiraBaseUrl, captureTemplates: parseTemplates(d.get('captureTemplates')),
+        reviewClaudeItems: d.get('reviewClaudeItems') === '1',
       };
     } catch {
       return { ...DEFAULT_SETTINGS, captureTemplates: [] };
@@ -138,7 +142,7 @@ export class Store {
       ['staleDaysAfterDue', String(s.staleDaysAfterDue)], ['staleDaysNoDue', String(s.staleDaysNoDue)],
       ['mcpReadOnly', s.mcpReadOnly ? '1' : '0'], ['compact', s.compact ? '1' : '0'], ['sound', s.sound ? '1' : '0'],
       ['haptics', s.haptics ? '1' : '0'], ['hotkey', s.hotkey],
-      ['jiraBaseUrl', s.jiraBaseUrl ?? ''], ['captureTemplates', JSON.stringify(s.captureTemplates ?? [])],
+      ['jiraBaseUrl', s.jiraBaseUrl ?? ''], ['captureTemplates', JSON.stringify(s.captureTemplates ?? [])], ['reviewClaudeItems', s.reviewClaudeItems ? '1' : '0'],
     ];
     write(this.db, () => {
       for (const [k, v] of pairs) run(this.db, 'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', k, v);
@@ -186,8 +190,8 @@ export class Store {
     const where = includeArchived ? '' : 'WHERE p.archived = 0';
     const rows = all(this.db, `SELECT p.*,
         (SELECT MAX(occurred_at) FROM interactions WHERE person_id = p.id) AS last_at,
-        (SELECT COUNT(*) FROM items WHERE person_id = p.id AND kind = 'owe' AND status = 'open') AS open_owe,
-        (SELECT COUNT(*) FROM items WHERE person_id = p.id AND kind = 'wait' AND status = 'open') AS open_wait
+        (SELECT COUNT(*) FROM items WHERE person_id = p.id AND kind = 'owe' AND status = 'open' AND proposed = 0) AS open_owe,
+        (SELECT COUNT(*) FROM items WHERE person_id = p.id AND kind = 'wait' AND status = 'open' AND proposed = 0) AS open_wait
       FROM people p ${where} ORDER BY p.name COLLATE NOCASE`);
     return rows.map((r) => {
       const person = personFromRow(r);
@@ -291,7 +295,7 @@ export class Store {
 
   /** Tags of open items with their counts. */
   allTags(): Array<[string, number]> {
-    return all(this.db, "SELECT tag, COUNT(*) c FROM item_tags JOIN items ON items.id = item_id WHERE status = 'open' GROUP BY tag ORDER BY tag")
+    return all(this.db, "SELECT tag, COUNT(*) c FROM item_tags JOIN items ON items.id = item_id WHERE status = 'open' AND proposed = 0 GROUP BY tag ORDER BY tag")
       .map((r) => [str(r.tag), int(r.c)]);
   }
 
@@ -303,6 +307,7 @@ export class Store {
     const status = f.status === undefined ? 'open' : f.status;
     if (status !== null) { where.push('status = ?'); params.push(status); }
     if (f.dueBefore !== undefined) { where.push('due_at IS NOT NULL AND due_at < ?'); params.push(toDbDate(f.dueBefore)); }
+    if (f.proposedOnly) where.push('proposed = 1'); else if (!f.includeProposed) where.push('proposed = 0');
     if (f.inboxOnly) where.push('inbox = 1');
     if (f.externalId !== undefined) { where.push('external_id = ?'); params.push(f.externalId); }
     if (f.tag !== undefined) { where.push('id IN (SELECT item_id FROM item_tags WHERE tag = ?)'); params.push(f.tag); }
@@ -330,6 +335,7 @@ export class Store {
       i.id = id;
       i.updatedAt = now; i.lastTouchedAt = now;
       if (i.dueAt !== null || i.personId !== null) i.inbox = false;
+      if (i.status !== 'open') i.proposed = false; // done or dropped over MCP: no longer waiting for review
       this.updateItem(i);
     });
   }
@@ -339,7 +345,7 @@ export class Store {
     return write(this.db, () => {
       const i = this.fetchItem(id);
       if (!i || i.status !== 'open') return null;
-      i.status = 'done'; i.completedAt = now; i.updatedAt = now; i.lastTouchedAt = now;
+      i.status = 'done'; i.completedAt = now; i.updatedAt = now; i.lastTouchedAt = now; i.proposed = false;
       this.updateItem(i);
       this.event(id, now, 'completed', null);
       const rule = i.recurRule;
@@ -362,22 +368,49 @@ export class Store {
     write(this.db, () => {
       const i = this.fetchItem(id);
       if (!i) return;
-      i.status = 'dropped'; i.updatedAt = now; i.lastTouchedAt = now; i.inbox = false;
+      i.status = 'dropped'; i.updatedAt = now; i.lastTouchedAt = now; i.inbox = false; i.proposed = false;
       this.updateItem(i);
       this.event(id, now, 'dropped', null);
+    });
+  }
+
+  // ---- proposed items (added by Claude while `reviewClaudeItems` is on) ----
+
+  /** Open proposals, newest first. They are left out of every other list until accepted. */
+  proposedItems(_now: number = Date.now()): Item[] {
+    return all(this.db, "SELECT * FROM items WHERE status = 'open' AND proposed = 1 ORDER BY created_at DESC, rowid DESC").map(itemFromRow);
+  }
+
+  /** Proposals become normal items (an item with no person and no due date stays in the inbox). Ids that are not open proposals are ignored. */
+  acceptProposed(ids: string[], now: number = Date.now()): void {
+    write(this.db, () => {
+      for (const id of ids) {
+        const i = this.fetchItem(id);
+        if (i && i.proposed && i.status === 'open') this.update(id, (it) => { it.proposed = false; }, now);
+      }
+    });
+  }
+
+  /** Proposals are dropped like `drop` does. Their external id stays, so a sweep never re-imports them. Ids that are not open proposals are ignored. */
+  dismissProposed(ids: string[], now: number = Date.now()): void {
+    write(this.db, () => {
+      for (const id of ids) {
+        const i = this.fetchItem(id);
+        if (i && i.proposed && i.status === 'open') this.drop(id, now);
+      }
     });
   }
 
   /** Finished or dropped items, newest first. */
   history(since: number | null = null, limit = 500): Item[] {
     const where = since === null ? '' : 'AND updated_at >= ?';
-    return all(this.db, `SELECT * FROM items WHERE status != 'open' ${where} ORDER BY updated_at DESC LIMIT ?`,
+    return all(this.db, `SELECT * FROM items WHERE status != 'open' AND proposed = 0 ${where} ORDER BY updated_at DESC LIMIT ?`,
       ...(since === null ? [] : [toDbDate(since)]), limit).map(itemFromRow);
   }
 
   /** Open items hidden until a later time, soonest wake-up first. */
   snoozed(now: number = Date.now()): Item[] {
-    return all(this.db, "SELECT * FROM items WHERE status = 'open' AND snoozed_until IS NOT NULL AND snoozed_until > ? ORDER BY snoozed_until ASC",
+    return all(this.db, "SELECT * FROM items WHERE status = 'open' AND proposed = 0 AND snoozed_until IS NOT NULL AND snoozed_until > ? ORDER BY snoozed_until ASC",
       toDbDate(now)).map(itemFromRow);
   }
 
@@ -434,7 +467,7 @@ export class Store {
       .map(interactionFromRow)
       .map((interaction) => ({
         interaction,
-        items: all(this.db, 'SELECT * FROM items WHERE interaction_id = ? ORDER BY created_at, rowid', interaction.id).map(itemFromRow),
+        items: all(this.db, 'SELECT * FROM items WHERE interaction_id = ? AND proposed = 0 ORDER BY created_at, rowid', interaction.id).map(itemFromRow),
       }));
   }
 
@@ -476,7 +509,7 @@ export class Store {
       else words.push(tok);
     }
     const fts = words.map((w) => w.replaceAll('"', '')).filter((w) => w !== '').map((w) => `"${w}"*`).join(' ');
-    const where: string[] = [];
+    const where: string[] = ['proposed = 0'];
     const params: SQLInputValue[] = [];
     if (fts !== '') { where.push('rowid IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?)'); params.push(fts); }
     if (kinds) { where.push(`kind IN (${placeholders(kinds.length)})`); params.push(...kinds); }
@@ -513,12 +546,12 @@ export class Store {
   weekSummary(from: number, to: number, now: number = Date.now()): WeekSummary {
     const s = this.settings();
     const f = toDbDate(from), t = toDbDate(to);
-    const created = all(this.db, 'SELECT * FROM items WHERE created_at >= ? AND created_at < ? ORDER BY rowid', f, t).map(itemFromRow);
-    const completed = all(this.db, 'SELECT * FROM items WHERE completed_at >= ? AND completed_at < ? ORDER BY rowid', f, t).map(itemFromRow);
+    const created = all(this.db, 'SELECT * FROM items WHERE proposed = 0 AND created_at >= ? AND created_at < ? ORDER BY rowid', f, t).map(itemFromRow);
+    const completed = all(this.db, 'SELECT * FROM items WHERE proposed = 0 AND completed_at >= ? AND completed_at < ? ORDER BY rowid', f, t).map(itemFromRow);
     const ids = all(this.db, "SELECT item_id FROM item_events WHERE event = 'snoozed' AND at >= ? AND at < ? GROUP BY item_id", f, t).map((r) => str(r.item_id));
-    const slipped = ids.length === 0 ? [] : all(this.db, `SELECT * FROM items WHERE id IN (${placeholders(ids.length)}) ORDER BY rowid`, ...ids)
+    const slipped = ids.length === 0 ? [] : all(this.db, `SELECT * FROM items WHERE proposed = 0 AND id IN (${placeholders(ids.length)}) ORDER BY rowid`, ...ids)
       .map(itemFromRow).filter((i) => i.snoozeCount >= 3 && i.status === 'open');
-    const stale = all(this.db, "SELECT * FROM items WHERE kind = 'wait' AND status = 'open' ORDER BY rowid").map(itemFromRow).filter((i) => isStaleWait(i, now, s));
+    const stale = all(this.db, "SELECT * FROM items WHERE kind = 'wait' AND status = 'open' AND proposed = 0 ORDER BY rowid").map(itemFromRow).filter((i) => isStaleWait(i, now, s));
     return { created, completed, slipped, stale };
   }
 
@@ -549,7 +582,7 @@ export class Store {
     const s = this.settings();
     const f = toDbDate(from), t = toDbDate(end);
     const open = this.items({ includeSnoozed: true }, end);
-    const inWindow = (where: string): Item[] => all(this.db, `SELECT * FROM items WHERE ${where} ORDER BY rowid`, f, t).map(itemFromRow);
+    const inWindow = (where: string): Item[] => all(this.db, `SELECT * FROM items WHERE proposed = 0 AND ${where} ORDER BY rowid`, f, t).map(itemFromRow);
     const overBy = (x: PersonSummary): number => (x.daysSinceLast ?? 0) - (x.person.cadenceDays ?? 0);
     return {
       from, to: end,
@@ -557,7 +590,7 @@ export class Store {
       staleWaits: open.filter((i) => isStaleWait(i, end, s)),
       overduePromises: open.filter((i) => i.kind === 'owe' && isOverdue(i, end)),
       offCadence: this.personSummaries(end).filter((x) => x.cadenceOverdue).sort((a, b) => overBy(b) - overBy(a)),
-      closed: all(this.db, 'SELECT * FROM items WHERE completed_at >= ? AND completed_at < ? ORDER BY completed_at, rowid', f, t).map(itemFromRow),
+      closed: all(this.db, 'SELECT * FROM items WHERE proposed = 0 AND completed_at >= ? AND completed_at < ? ORDER BY completed_at, rowid', f, t).map(itemFromRow),
       dropped: inWindow("status = 'dropped' AND updated_at >= ? AND updated_at < ?"),
       created: inWindow('created_at >= ? AND created_at < ?'),
       keptRate: this.kept(from, end, Math.max(1, Math.round((end - from) / DAY_MS))),
@@ -568,7 +601,7 @@ export class Store {
   activity(from: number, limit = 100, now: number = Date.now()): ActivityEntry[] {
     const known = new Set<string>(['created', 'completed', 'dropped', 'snoozed', 'reopened']);
     return all(this.db, `SELECT e.at AS event_at, e.event AS event_name, i.* FROM item_events e JOIN items i ON i.id = e.item_id
-      WHERE e.at >= ? AND e.at <= ? ORDER BY e.at DESC, e.id DESC LIMIT ?`, toDbDate(from), toDbDate(now), limit)
+      WHERE i.proposed = 0 AND e.at >= ? AND e.at <= ? ORDER BY e.at DESC, e.id DESC LIMIT ?`, toDbDate(from), toDbDate(now), limit)
       .map((r) => ({ at: dateOrNull(r.event_at)!, event: (known.has(str(r.event_name)) ? str(r.event_name) : 'edited') as ActivityEvent, item: itemFromRow(r) }));
   }
 
@@ -682,7 +715,7 @@ export class Store {
     });
     return JSON.stringify({
       interactions: dump('interactions', []),
-      items: dump('items', ['due_has_time', 'pinned', 'inbox']),
+      items: dump('items', ['due_has_time', 'pinned', 'inbox', 'proposed']),
       people: dump('people', ['hidden_from_claude', 'archived']),
     }, null, 2);
   }
@@ -694,10 +727,10 @@ export class Store {
 
   /** Everything the renderer needs to draw the main screens. */
   snapshot(now: number = Date.now()): Snapshot {
-    const snoozedCount = int(get(this.db, "SELECT COUNT(*) c FROM items WHERE status = 'open' AND snoozed_until IS NOT NULL AND snoozed_until > ?", toDbDate(now))?.c);
+    const snoozedCount = int(get(this.db, "SELECT COUNT(*) c FROM items WHERE status = 'open' AND proposed = 0 AND snoozed_until IS NOT NULL AND snoozed_until > ?", toDbDate(now))?.c);
     return {
       settings: this.settings(), today: this.today(now), openItems: this.items({ includeSnoozed: false }, now),
-      summaries: this.personSummaries(now), tags: this.allTags(), auditLog: this.auditLog(), snoozedCount, now,
+      summaries: this.personSummaries(now), tags: this.allTags(), auditLog: this.auditLog(), snoozedCount, proposed: this.proposedItems(now), now,
     };
   }
 }

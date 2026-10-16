@@ -7,7 +7,7 @@ const clock = (ms: number) => `${String(new Date(ms).getHours()).padStart(2, '0'
 
 function item(id: string, o: Partial<Item> = {}): Item {
   return { id, kind: 'task', title: id, body: null, quote: null, personId: null, status: 'open', dueAt: null, dueHasTime: false, remindAt: null, snoozedUntil: null,
-    snoozeCount: 0, recurRule: null, pinned: false, inbox: false, source: 'hotkey', createdAt: 0, updatedAt: 0, completedAt: null, lastTouchedAt: 0, externalId: null, sourceLabel: null, sourceUrl: null, interactionId: null, ...o };
+    snoozeCount: 0, recurRule: null, pinned: false, inbox: false, source: 'hotkey', createdAt: 0, updatedAt: 0, completedAt: null, lastTouchedAt: 0, externalId: null, sourceLabel: null, sourceUrl: null, interactionId: null, proposed: false, ...o };
 }
 
 describe('snooze presets', () => {

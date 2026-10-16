@@ -17,7 +17,7 @@ describe('prompts/list', () => {
 
   it('returns every prompt with name, title, description and arguments', () => {
     const list = rpc('prompts/list').result.prompts as any[];
-    expect(list).toHaveLength(10);
+    expect(list).toHaveLength(11);
     expect(list.map((p) => p.name)).toEqual(PROMPTS.map((p) => p.id));
     for (const [i, p] of PROMPTS.entries()) {
       expect(list[i]).toEqual({
@@ -33,7 +33,7 @@ describe('prompts/list', () => {
   });
 
   it('works without params', () => {
-    expect(rpc('prompts/list', {}).result.prompts).toHaveLength(10);
+    expect(rpc('prompts/list', {}).result.prompts).toHaveLength(11);
   });
 });
 
@@ -76,7 +76,7 @@ describe('prompts/get', () => {
   });
 
   it('every prompt renders with no leftover placeholder except missing required arguments, which are refused', () => {
-    expect(PROMPTS).toHaveLength(10);
+    expect(PROMPTS).toHaveLength(11);
     for (const p of PROMPTS) {
       const required = p.arguments.filter((a) => a.required);
       const bare = rpc('prompts/get', { name: p.id, arguments: {} });

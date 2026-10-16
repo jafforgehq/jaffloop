@@ -4,7 +4,7 @@ import { releaseNotes, roadmap } from '../src/renderer/releases-data';
 import type { PersonSummary } from '../src/shared/types';
 
 const s = (id: string, days: number | null): PersonSummary => ({
-  person: { id, handle: id, name: id, relation: 'report', cadenceDays: 14, matchEmails: '', hiddenFromClaude: false, archived: false, notes: '', startDate: null, birthday: null },
+  person: { id, handle: id, name: id, title: '', relation: 'report', cadenceDays: 14, matchEmails: '', hiddenFromClaude: false, archived: false, notes: '', startDate: null, birthday: null },
   lastInteraction: null, openOwe: 0, openWait: 0, daysSinceLast: days, cadenceOverdue: false,
 });
 
@@ -46,9 +46,9 @@ describe('people helpers', () => {
 
 describe('releases data', () => {
   it('leads with the newest release and keeps the older history', () => {
-    expect(releaseNotes.map((n) => n.version)).toEqual(['0.3.1', '0.3.0', '0.2.0', '0.1.0', '0.0.4', '0.0.3', '0.0.2', '0.0.1']);
-    expect(releaseNotes[3]!.title).toBe('Now built on Electron');
-    expect(releaseNotes[4]!.highlights).toHaveLength(10);
+    expect(releaseNotes.map((n) => n.version)).toEqual(['0.4.0', '0.3.1', '0.3.0', '0.2.0', '0.1.0', '0.0.4', '0.0.3', '0.0.2', '0.0.1']);
+    expect(releaseNotes[4]!.title).toBe('Now built on Electron');
+    expect(releaseNotes[5]!.highlights).toHaveLength(10);
     expect(roadmap.flatMap((g) => g.items).some((i) => i.includes('Today they never do'))).toBe(false);
   });
 });

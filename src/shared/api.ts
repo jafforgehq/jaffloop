@@ -131,6 +131,10 @@ export interface Api {
   interactionHistory(personId: string, limit?: number): Promise<InteractionWithItems[]>;
   /** end a 1:1: log the interaction with its notes and link the items created during it (itemIds) to it */
   logOneOnOne(personId: string, notes: string, itemIds: string[], startedAt?: number): Promise<Interaction>;
+  /** accept proposed items (Claude's, waiting in the Inbox): they become normal items */
+  acceptProposed(ids: string[]): Promise<void>;
+  /** dismiss proposed items: dropped, and never re-imported because their external id stays known */
+  dismissProposed(ids: string[]): Promise<void>;
   /** pause or resume notifications; null resumes */
   pauseNotifications(untilMs: number | null): Promise<void>;
 
@@ -172,7 +176,7 @@ export interface Api {
 export const API_METHODS = [
   'snapshot', 'item', 'items', 'search', 'history', 'snoozed', 'tagsOf', 'setTags', 'saidLog', 'interactions', 'capture', 'parse',
   'update', 'restore', 'complete', 'drop', 'reopen', 'snooze', 'assign', 'savePerson', 'addPerson', 'logInteraction',
-  'interactionHistory', 'logOneOnOne', 'captureMany', 'review', 'keptRate', 'activity', 'heatGrid', 'onTimeStreak', 'upcomingDates', 'pauseNotifications',
+  'interactionHistory', 'logOneOnOne', 'acceptProposed', 'dismissProposed', 'captureMany', 'review', 'keptRate', 'activity', 'heatGrid', 'onTimeStreak', 'upcomingDates', 'pauseNotifications',
   'uiState', 'setUiState', 'appInfo', 'saveSettings',
   'openMain', 'openCapture', 'captureSubmit', 'captureHide', 'openSettings', 'openPersonBrief', 'openMorningBrief', 'closeWindow',
   'setHotkey', 'playSound', 'copyText', 'openExternal', 'revealDatabase', 'exportData', 'quit',

@@ -4,7 +4,7 @@
 import { useEffect, useRef } from 'preact/hooks';
 import type { Item } from '../../shared/types';
 import {
-  completeMany, drawerItemId, dropMany, drop, multi, selectedItemId, showPeoplePalette, showSearch, showShortcuts, showWelcome, snooze, snoozeMany, snoozePresets, toggleDrawer,
+  completeMany, drawerItemId, dropMany, drop, multi, selectedItemId, showPeoplePalette, showOnboarding, showSearch, showShortcuts, showWelcome, snooze, snoozeMany, snoozePresets, toggleDrawer,
   toggleMulti, togglePin, triggerComplete, triggerEdit,
 } from '../model';
 import { moveSelection, neighbour } from '../ui-logic';
@@ -28,7 +28,7 @@ export function useItemKeys(items: Item[], opts?: ItemKeysOptions) {
       // a focused button or an open menu handles Enter/space/arrows itself
       if (document.querySelector('.menu') || (active?.matches('button, a') && (e.key === 'Enter' || e.key === ' '))) return;
       const key = e.key;
-      const overlay = showSearch.value || showShortcuts.value || showWelcome.value || showPeoplePalette.value;
+      const overlay = showSearch.value || showShortcuts.value || showWelcome.value || showOnboarding.value || showPeoplePalette.value;
       if (overlay && key !== '?') return;
 
       const { items: list, opts: o } = latest.current;
@@ -38,6 +38,13 @@ export function useItemKeys(items: Item[], opts?: ItemKeysOptions) {
       const handled = () => { e.preventDefault(); };
       const move = (d: number) => { selectedItemId.value = moveSelection(selectedItemId.value, ids, d); };
       const tomorrow = () => snoozePresets().find((p) => p.label.startsWith('Tomorrow'))?.date;
+
+      // a proposal (Claude's, waiting in the Inbox) only moves, opens details and takes the screen's own keys (a accept, x dismiss)
+      if (sel?.proposed && !['ArrowDown', 'ArrowUp', 'j', 'k', 'Escape', '?', ' '].includes(key)) {
+        if (e.repeat) return;
+        if (o?.triage?.(key, sel, list)) handled();
+        return;
+      }
 
       switch (key) {
         case 'ArrowDown': move(1); return handled();

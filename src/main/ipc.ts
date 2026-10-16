@@ -68,6 +68,8 @@ export function createHandlers(c: IpcCtx): Handlers {
     complete: (_e, id) => write(() => c.store.complete(id, now())),
     drop: (_e, id) => write(() => c.store.drop(id, now())),
     reopen: (_e, id) => write(() => c.store.reopen(id, now())),
+    acceptProposed: (_e, ids) => write(() => c.store.acceptProposed(ids, now())),
+    dismissProposed: (_e, ids) => write(() => c.store.dismissProposed(ids, now())),
     snooze: (_e, id, until) => write(() => c.store.snooze(id, until, now())),
     assign: (_e, id, handle, due, hasTime) => write(() => c.store.assign(id, handle, due, hasTime ?? false, now())),
     savePerson: (_e, p: Person) => write(() => c.store.savePerson(p)),

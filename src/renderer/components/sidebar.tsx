@@ -7,6 +7,7 @@ import {
   api, assignMany, go, hasUnseenRelease, info, isCollapsed, nav, orderedPeople, overdueCount, removeFilter, settings, showSearch, snapshot, toggleCollapsed,
   togglePinnedPerson, ui, updateState,
 } from '../model';
+import { inboxBadge } from '../onboarding-logic';
 import { todayTotal } from '../ui-logic';
 import { Icon } from './icons';
 import { Avatar, Dot, Kbd, openContextMenu } from './ui';
@@ -118,7 +119,7 @@ export function Sidebar() {
       <div class="nav">
         <NavItem icon="dotted" title="Today" to="today" count={total} hot={overdueCount.value > 0} tip="Items that need you today" />
         <NavItem icon="scroll" title="Ledger" to="ledger" count={snapshot.value.openItems.filter((i) => i.kind === 'owe').length} tip="Open promises you made" />
-        <NavItem icon="tray" title="Inbox" to="inbox" count={snapshot.value.openItems.filter((i) => i.inbox).length} tip="Captures to triage" />
+        <NavItem icon="tray" title="Inbox" to="inbox" count={inboxBadge(snapshot.value.proposed.length, snapshot.value.openItems.filter((i) => i.inbox).length)} tip="Captures to triage, and what Claude added" />
         <NavItem icon="person2" title="People" to="people" />
         <NavItem icon="moon" title="Snoozed" to="snoozed" count={snapshot.value.snoozedCount} tip="Hidden until later" />
         <NavItem icon="circlecheck" title="Done" to="done" />

@@ -5,6 +5,7 @@ import type { AppInfo, Nav, UiState, UpdateState } from '../shared/api';
 import type { Item, Person, PersonSummary, Snapshot } from '../shared/types';
 import { Fmt, NavHistory, PinOrder, nextOneOnOneAt, parseCapture, sortPeople } from './core';
 import { captureLine, loggedToast } from './oneonone-logic';
+import { proposedToast } from './onboarding-logic';
 import { nextOneOnOnePreset, nudgeText } from './speed-logic';
 import { applyUiTheme } from './themes';
 import { type SnoozePreset, snoozePresets as presetsAt } from './ui-logic';
@@ -15,9 +16,9 @@ export const view = api.view;
 // ---------------------------------------------------------------- state
 
 const emptySnapshot: Snapshot = {
-  settings: { eodTime: '17:30', workStart: '09:00', workEnd: '18:00', morningBrief: '08:30', staleDaysAfterDue: 3, staleDaysNoDue: 5, mcpReadOnly: false, compact: false, sound: false, haptics: true, hotkey: 'Alt+Space', jiraBaseUrl: '', captureTemplates: [] },
+  settings: { eodTime: '17:30', workStart: '09:00', workEnd: '18:00', morningBrief: '08:30', staleDaysAfterDue: 3, staleDaysNoDue: 5, mcpReadOnly: false, compact: false, sound: false, haptics: true, hotkey: 'Alt+Space', jiraBaseUrl: '', captureTemplates: [], reviewClaudeItems: false },
   today: { slipping: [], overdue: [], today: [], waitingStale: [], inbox: [], checkIn: [] },
-  openItems: [], summaries: [], tags: [], auditLog: [], snoozedCount: 0, now: Date.now(),
+  openItems: [], summaries: [], tags: [], auditLog: [], snoozedCount: 0, proposed: [], now: Date.now(),
 };
 const defaultUi: UiState = {
   density: 'comfortable', appearance: 'system', accent: 'graphite', pinnedPeople: [], collapsed: [], pinOrder: [], savedFilters: [], lastNav: 'today',
@@ -36,6 +37,8 @@ export const nav = signal<Nav>('today');
 export const showSearch = signal(false);
 export const showShortcuts = signal(false);
 export const showWelcome = signal(false);
+/** the "Add your team" wizard (main window only) */
+export const showOnboarding = signal(false);
 export const selectedItemId = signal<string | null>(null);
 export const multi = signal<ReadonlySet<string>>(new Set());
 export const drawerItemId = signal<string | null>(null);
@@ -58,6 +61,8 @@ export const summaries = computed(() => snapshot.value.summaries);
 export const orderedPeople = computed(() => sortPeople(summaries.value, new Set(ui.value.pinnedPeople)));
 export const overdueCount = computed(() => openItems.value.filter((i) => Fmt.isOverdue(i, snapshot.value.now) || Fmt.isSlipping(i)).length);
 export const inboxItems = computed(() => openItems.value.filter((i) => i.inbox));
+/** items Claude added that wait for Accept or Dismiss (not part of openItems) */
+export const proposedItems = computed(() => snapshot.value.proposed);
 export const ledgerItems = computed(() => openItems.value.filter((i) => i.kind === 'owe'));
 export const recentPeople = computed(() => {
   const last = new Map<string, number>();
@@ -118,6 +123,13 @@ export function go(n: Nav) {
 export function goBack() { const n = history.goBack(nav.value); if (n) { travelling = true; go(n); travelling = false; } }
 export function goForward() { const n = history.goForward(nav.value); if (n) { travelling = true; go(n); travelling = false; } }
 
+/** Pseudo screen the Settings window asks the main window for: People page with the wizard open. */
+const ADD_PEOPLE = 'add-people';
+function enter(n: Nav) {
+  if (n === ADD_PEOPLE) { go('people'); openOnboarding(); }
+  else go(n);
+}
+
 export async function initModel(): Promise<void> {
   const [s, u, i, up] = await Promise.all([api.snapshot(), api.uiState(), api.appInfo(), api.updateState()]);
   batch(() => { snapshot.value = s; ui.value = u; info.value = i; updateState.value = up; });
@@ -126,7 +138,7 @@ export async function initModel(): Promise<void> {
   api.on('data-changed', () => { void reload(); });
   api.on('ui-state', (v) => { ui.value = v; applyUi(v); });
   api.on('update-state', (v) => { updateState.value = v; });
-  api.on('navigate', (n) => { go(n); });
+  api.on('navigate', (n) => { enter(n); });
   api.on('select-item', (id) => { selectedItemId.value = id; });
   api.on('command', (c) => {
     if (c === 'back') goBack();
@@ -138,7 +150,8 @@ export async function initModel(): Promise<void> {
     else if (c === 'new-capture') void api.openCapture();
   });
   if (view === 'main') {
-    if (u.lastNav) nav.value = u.lastNav;
+    if (u.lastNav === ADD_PEOPLE) { nav.value = 'people'; void api.setUiState({ lastNav: 'people' }); openOnboarding(); }
+    else if (u.lastNav) nav.value = u.lastNav;
     if (!summaries.value.some((x) => nav.value === `person:${x.person.id}`) && nav.value.startsWith('person:')) nav.value = 'today';
     checkWhatsNew();
     if (!u.welcomeSeen) {
@@ -368,6 +381,12 @@ export function reveal(i: Item) {
   selectedItemId.value = i.id;
 }
 
+export function openOnboarding() {
+  if (showWelcome.value) dismissWelcome();
+  showOnboarding.value = true;
+}
+export const closeOnboarding = () => { showOnboarding.value = false; };
+
 export function dismissWelcome(addExample = false) {
   if (addExample) void save(`todo Try Jaffloop: press ${Fmt.hotkeyLabel(settings.value.hotkey)} and capture something fri`);
   void api.setUiState({ welcomeSeen: true });
@@ -440,3 +459,25 @@ export async function endOneOnOne(p: Person, notes: string, itemIds: string[], s
   setTimeout(() => { if (pulsePersonId.value === p.id) pulsePersonId.value = null; }, 1000);
   return itemIds.length;
 }
+
+
+// ---- added by ui-onboarding (0.4.0)
+/** Accept Claude's proposals: they become normal items. */
+export async function acceptProposed(ids: string[], label?: string) {
+  const before = await priors(ids);
+  await api.acceptProposed(ids);
+  clearMulti(ids);
+  await reload();
+  showToast(proposedToast('Accepted', ids.length, label), () => { void restore(before); });
+}
+
+/** Dismiss Claude's proposals: dropped, and never re-imported (their external id stays known). */
+export async function dismissProposed(ids: string[], label?: string) {
+  const before = await priors(ids);
+  await api.dismissProposed(ids);
+  clearMulti(ids);
+  await reload();
+  showToast(proposedToast('Dismissed', ids.length, label), () => { void restore(before); });
+}
+export const acceptOne = (i: Item) => acceptProposed([i.id], short(i.title));
+export const dismissOne = (i: Item) => dismissProposed([i.id], short(i.title));

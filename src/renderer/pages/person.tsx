@@ -13,6 +13,7 @@ import { StreakChip } from '../components/streak';
 import { CadenceRing, Chip, EmptySection, GhostButton, MenuButton, Popover, PrimaryButton, SectionHeader } from '../components/ui';
 import { useItemKeys } from '../hooks/use-item-keys';
 import { api, captureFor, itemsFor, logInteraction, pulsePersonId, savePerson, summary } from '../model';
+import { titleLine } from '../onboarding-logic';
 import { firstName, lastStat } from '../people-logic';
 import { birthdayToInput, inputToBirthday, validDateInput } from '../reports-logic';
 
@@ -77,7 +78,7 @@ function PersonBody({ s, startOneOnOne }: { s: PersonSummary; startOneOnOne: () 
 
   return (
     <div class="person-wrap">
-      <Page title={p.name} header={header}>
+      <Page title={p.name} subtitle={p.title.trim() ? titleLine(p) : undefined} header={header}>
         {section('I owe them', owe, 'Nothing promised.')}
         {section('They owe me', wait, 'Nothing pending.')}
         {section('Bring up', bring, 'No talking points.')}
@@ -105,12 +106,13 @@ function PersonEditor({ person, onDone }: { person: Person; onDone: () => void }
   const step = (d: number) => setCadence((c) => Math.min(90, Math.max(0, c + d)));
   const submit = () => {
     if (!draft.name.trim()) return;
-    void savePerson({ ...draft, name: draft.name.trim(), cadenceDays: cadence === 0 ? null : cadence });
+    void savePerson({ ...draft, name: draft.name.trim(), title: draft.title.trim(), cadenceDays: cadence === 0 ? null : cadence });
     onDone();
   };
   return (
     <div class="person-editor" onKeyDown={(e) => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') submit(); }}>
       <input class="input" value={draft.name} placeholder="Name" aria-label="Name" onInput={(e) => set('name', (e.target as HTMLInputElement).value)} />
+      <input class="input" value={draft.title} placeholder="Position (e.g. Staff engineer)" aria-label="Position" onInput={(e) => set('title', (e.target as HTMLInputElement).value)} />
       <label class="form-line">Relation
         <select class="input" style={{ width: 'auto' }} value={draft.relation} onChange={(e) => set('relation', (e.target as HTMLSelectElement).value as Relation)}>
           {RELATIONS.map((r) => <option key={r} value={r}>{r}</option>)}

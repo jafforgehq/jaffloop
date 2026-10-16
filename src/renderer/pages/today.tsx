@@ -6,13 +6,14 @@ import { DateChips } from '../components/date-chips';
 import { Icon } from '../components/icons';
 import { ItemList } from '../components/item-row';
 import { Page, SectionBlock } from '../components/page';
-import { Avatar, Dot, QuietButton, SectionHeader, Segmented } from '../components/ui';
+import { Avatar, Dot, GhostButton, QuietButton, SectionHeader, Segmented } from '../components/ui';
 import { Fmt } from '../core';
 import type { PersonSummary } from '../../shared/types';
 import { ITEM_KINDS } from '../../shared/types';
 import type { TodayGroup } from '../../shared/api';
 import { useItemKeys } from '../hooks/use-item-keys';
 import { api, dismissCheckIn, dismissedCheckIns, drawerItemId, go, isCollapsed, openItems, orderedItems, person, showPeoplePalette, showSearch, showShortcuts, snapshot, todayPersonFilter, ui } from '../model';
+import { reviewCardText } from '../onboarding-logic';
 import { filterToday, localDay, shouldBurst, urgentCount } from '../speed-logic';
 import { todayBlocks, todayTotal } from '../ui-logic';
 
@@ -63,6 +64,7 @@ export function TodayPage() {
   const visible = blocks.filter((b) => !isCollapsed(`today.${b.id}`)).flatMap((b) => b.items);
   const total = todayTotal(t);
   const snoozed = snapshot.value.snoozedCount;
+  const proposed = snapshot.value.proposed.length;
   useItemKeys(visible);
 
   useEffect(() => {
@@ -90,6 +92,13 @@ export function TodayPage() {
   const header = (
     <>
       <KindMix />
+      {proposed > 0 && (
+        <div class="review-card" data-testid="review-card">
+          <Icon name="sparkles" size={13} />
+          <span class="grow">{reviewCardText(proposed)}</span>
+          <GhostButton onClick={() => go('inbox')}>Review in Inbox</GhostButton>
+        </div>
+      )}
       <div class="row-flex gap10" style={{ marginTop: 14 }}>
         <div style={focus ? { opacity: 0.65, pointerEvents: 'none' } : undefined}>
           <Segmented<TodayGroup> label="Group by" value={group} onChange={(v) => { void api.setUiState({ todayGroup: v }); }}
