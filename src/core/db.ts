@@ -32,7 +32,7 @@ export function fromDbDate(v: unknown): number {
 export const dateOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : fromDbDate(v));
 export const dbDateOrNull = (ms: number | null | undefined): string | null => (ms === null || ms === undefined ? null : toDbDate(ms));
 
-// ---- schema (copied from a database made by the Swift build; GRDB migrations "v1" and "v2-person-notes", then our "v3-person-dates") ----
+// ---- schema (copied from a database made by the Swift build; GRDB migrations "v1" and "v2-person-notes", then our "v3-person-dates" and "v4-external-ids") ----
 
 const V1 = `
 CREATE TABLE "people" ("id" TEXT PRIMARY KEY NOT NULL, "handle" TEXT NOT NULL UNIQUE, "name" TEXT NOT NULL, "relation" TEXT NOT NULL DEFAULT 'other', "cadence_days" INTEGER, "match_emails" TEXT NOT NULL DEFAULT '', "hidden_from_claude" BOOLEAN NOT NULL DEFAULT 0, "archived" BOOLEAN NOT NULL DEFAULT 0);
@@ -61,11 +61,19 @@ const V2 = `ALTER TABLE "people" ADD COLUMN "notes" TEXT NOT NULL DEFAULT ''`;
 const V3 = `ALTER TABLE "people" ADD COLUMN "start_date" TEXT;
 ALTER TABLE "people" ADD COLUMN "birthday" TEXT;`;
 
+// 0.3.0: where an item came from (dedup key + chip + link) and the 1:1 it was recorded in. external_id is unique when set.
+const V4 = `ALTER TABLE "items" ADD COLUMN "external_id" TEXT;
+ALTER TABLE "items" ADD COLUMN "source_label" TEXT;
+ALTER TABLE "items" ADD COLUMN "source_url" TEXT;
+ALTER TABLE "items" ADD COLUMN "interaction_id" TEXT;
+CREATE UNIQUE INDEX "items_external_id" ON "items"("external_id") WHERE "external_id" IS NOT NULL;`;
+
 /** In GRDB's order. Exported so tests can build a v1 database. */
 export const MIGRATIONS: ReadonlyArray<{ id: string; sql: string }> = [
   { id: 'v1', sql: V1 },
   { id: 'v2-person-notes', sql: V2 },
   { id: 'v3-person-dates', sql: V3 },
+  { id: 'v4-external-ids', sql: V4 },
 ];
 
 /** Runs `fn` in a write transaction (BEGIN IMMEDIATE, like GRDB); joins an open one. */

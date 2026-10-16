@@ -3,7 +3,8 @@
 // Main: `ipcMain.handle('api:<method>')` for each name in API_METHODS (src/main/ipc.ts); events go out on 'evt:<name>'.
 // The preload script builds window.jaffloop from API_METHODS, so adding a method means: add it to the interface AND the list.
 
-import type { ActivityEntry, HeatRow, Interaction, InteractionKind, Item, ItemFilter, ItemSource, KeptRate, ParsedCapture, Person, ReviewData, Snapshot, UpcomingDate } from './types';
+import type { ThemeName } from './themes-meta';
+import type { ActivityEntry, HeatRow, Interaction, InteractionWithItems, InteractionKind, Item, ItemFilter, ItemSource, KeptRate, ParsedCapture, Person, ReviewData, Snapshot, UpcomingDate } from './types';
 
 export type Density = 'compact' | 'comfortable' | 'spacious';
 export type AppearanceChoice = 'system' | 'light' | 'dark';
@@ -53,6 +54,8 @@ export interface UiState {
   burstDay: string;
   /** show a work-anniversary / birthday reminder chip under Check in */
   showDates: boolean;
+  /** colour theme; Classic follows `appearance`, the others fix light or dark (see src/shared/themes-meta.ts) */
+  theme: ThemeName;
 }
 
 export type UpdateStatus = 'unavailable' | 'idle' | 'checking' | 'downloading' | 'ready' | 'uptodate' | 'error';
@@ -124,6 +127,10 @@ export interface Api {
   /** consecutive weeks (counting back from this one) in which the 1:1 cadence was met */
   onTimeStreak(personId: string): Promise<number>;
   upcomingDates(withinDays?: number): Promise<UpcomingDate[]>;
+  /** past 1:1s (newest first) with their notes and the items recorded in them */
+  interactionHistory(personId: string, limit?: number): Promise<InteractionWithItems[]>;
+  /** end a 1:1: log the interaction with its notes and link the items created during it (itemIds) to it */
+  logOneOnOne(personId: string, notes: string, itemIds: string[], startedAt?: number): Promise<Interaction>;
   /** pause or resume notifications; null resumes */
   pauseNotifications(untilMs: number | null): Promise<void>;
 
@@ -165,7 +172,7 @@ export interface Api {
 export const API_METHODS = [
   'snapshot', 'item', 'items', 'search', 'history', 'snoozed', 'tagsOf', 'setTags', 'saidLog', 'interactions', 'capture', 'parse',
   'update', 'restore', 'complete', 'drop', 'reopen', 'snooze', 'assign', 'savePerson', 'addPerson', 'logInteraction',
-  'captureMany', 'review', 'keptRate', 'activity', 'heatGrid', 'onTimeStreak', 'upcomingDates', 'pauseNotifications',
+  'interactionHistory', 'logOneOnOne', 'captureMany', 'review', 'keptRate', 'activity', 'heatGrid', 'onTimeStreak', 'upcomingDates', 'pauseNotifications',
   'uiState', 'setUiState', 'appInfo', 'saveSettings',
   'openMain', 'openCapture', 'captureSubmit', 'captureHide', 'openSettings', 'openPersonBrief', 'openMorningBrief', 'closeWindow',
   'setHotkey', 'playSound', 'copyText', 'openExternal', 'revealDatabase', 'exportData', 'quit',

@@ -2,7 +2,7 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type {
   ActivityEntry, ActivityEvent, AuditEntry, CaptureTemplate, HeatRow, Interaction, InteractionKind, Item, ItemFilter, ItemKind, ItemSource,
-  ItemStatus, KeptRate, ParsedCapture, Person, PersonSummary, Relation, ReviewData, Settings, Snapshot, TodaySections, UpcomingDate, WeekSummary,
+  ItemStatus, InteractionWithItems, KeptRate, ParsedCapture, Person, PersonSummary, Relation, ReviewData, Settings, Snapshot, TodaySections, UpcomingDate, WeekSummary,
 } from '../shared/types';
 import { DAY_MS, addDays, dayDiff, startOfDay, startOfWeek } from './calendar';
 import { all, dateOrNull, dbDateOrNull, get, run, toDbDate, write, type Row } from './db';
@@ -13,6 +13,20 @@ import { parseCapture } from './parser';
 import { nextFutureOccurrence } from './recurrence';
 import { cadenceOverdue, daysSince, isOverdue, isSlipping, isStaleWait } from './rules';
 import { DEFAULT_SETTINGS, hm, hotkeyToAccelerator } from './settings';
+
+/** Where an item came from; `externalId` is the dedup key (unique across all items, whatever their status). */
+export interface ItemOrigin {
+  externalId?: string | null;
+  sourceLabel?: string | null;
+  sourceUrl?: string | null;
+  interactionId?: string | null;
+}
+
+/** `duplicate: true` means an item with that external id already existed: `item` is that one and nothing was written. */
+export interface InsertResult {
+  item: Item;
+  duplicate: boolean;
+}
 
 export interface StoreOptions {
   /** Accepted for API parity with the Swift Store; ignored (the local time zone is always used). */
@@ -33,6 +47,7 @@ function itemFromRow(r: Row): Item {
     recurRule: strOrNull(r.recur_rule), pinned: bool(r.pinned), inbox: bool(r.inbox), source: str(r.source) as ItemSource,
     createdAt: dateOrNull(r.created_at)!, updatedAt: dateOrNull(r.updated_at)!, completedAt: dateOrNull(r.completed_at),
     lastTouchedAt: dateOrNull(r.last_touched_at)!,
+    externalId: strOrNull(r.external_id), sourceLabel: strOrNull(r.source_label), sourceUrl: strOrNull(r.source_url), interactionId: strOrNull(r.interaction_id),
   };
 }
 
@@ -54,12 +69,13 @@ function interactionFromRow(r: Row): Interaction {
 const auditFromRow = (r: Row): AuditEntry => ({ id: int(r.id), at: dateOrNull(r.at)!, tool: str(r.tool), summary: str(r.summary), wrote: bool(r.wrote) });
 
 const ITEM_COLS = ['id', 'kind', 'title', 'body', 'quote', 'person_id', 'status', 'due_at', 'due_has_time', 'remind_at', 'snoozed_until',
-  'snooze_count', 'recur_rule', 'pinned', 'inbox', 'source', 'created_at', 'updated_at', 'completed_at', 'last_touched_at'];
+  'snooze_count', 'recur_rule', 'pinned', 'inbox', 'source', 'created_at', 'updated_at', 'completed_at', 'last_touched_at',
+  'external_id', 'source_label', 'source_url', 'interaction_id'];
 
 function itemParams(i: Item): SQLInputValue[] {
   return [i.id, i.kind, i.title, i.body, i.quote, i.personId, i.status, dbDateOrNull(i.dueAt), i.dueHasTime ? 1 : 0, dbDateOrNull(i.remindAt),
     dbDateOrNull(i.snoozedUntil), i.snoozeCount, i.recurRule, i.pinned ? 1 : 0, i.inbox ? 1 : 0, i.source, toDbDate(i.createdAt),
-    toDbDate(i.updatedAt), dbDateOrNull(i.completedAt), toDbDate(i.lastTouchedAt)];
+    toDbDate(i.updatedAt), dbDateOrNull(i.completedAt), toDbDate(i.lastTouchedAt), i.externalId, i.sourceLabel, i.sourceUrl, i.interactionId];
 }
 
 const PERSON_COLS = ['id', 'handle', 'name', 'relation', 'cadence_days', 'match_emails', 'hidden_from_claude', 'archived', 'notes', 'start_date', 'birthday'];
@@ -189,11 +205,11 @@ export class Store {
 
   // ---- items ----
 
-  create(p: ParsedCapture, source: ItemSource = 'hotkey', now: number = Date.now()): Item {
+  create(p: ParsedCapture, source: ItemSource = 'hotkey', now: number = Date.now(), origin: ItemOrigin = {}): Item {
     const person = p.personHandle !== null ? this.person(p.personHandle) : null;
     const item = newItem({
       kind: p.kind, title: p.title === '' ? 'Untitled' : p.title, quote: p.quote, personId: person?.id ?? null, dueAt: p.dueAt,
-      dueHasTime: p.dueHasTime, remindAt: p.remindAt, recurRule: p.recurRule, pinned: p.pinned, inbox: p.inbox, source, now,
+      dueHasTime: p.dueHasTime, remindAt: p.remindAt, recurRule: p.recurRule, pinned: p.pinned, inbox: p.inbox, source, now, ...origin,
     });
     if (item.kind === 'said' || item.kind === 'note') item.inbox = false;
     write(this.db, () => {
@@ -207,6 +223,38 @@ export class Store {
   /** Parse one line and save it. Used by the app, the MCP `capture` tool and tests. */
   capture(line: string, source: ItemSource = 'hotkey', now: number = Date.now()): Item {
     return this.create(parseCapture(line, { now, eod: hm(this.settings().eodTime) }), source, now);
+  }
+
+  /** The item with this external id (open, done or dropped), or null. */
+  findByExternalId(externalId: string): Item | null {
+    const r = get(this.db, 'SELECT * FROM items WHERE external_id = ?', externalId);
+    return r ? itemFromRow(r) : null;
+  }
+
+  /** Like `insert`, but an existing external id returns the existing item (`duplicate: true`) instead of writing or throwing. Never reopens it. */
+  insertOnce(item: Item, tags: string[] = []): InsertResult {
+    return this.once(item.externalId, () => { this.insert(item, tags); return item; });
+  }
+
+  /** Like `create`, with the same duplicate handling as `insertOnce` (the person is not created for a duplicate). */
+  createOnce(p: ParsedCapture, source: ItemSource, now: number, origin: ItemOrigin): InsertResult {
+    return this.once(origin.externalId ?? null, () => this.create(p, source, now, origin));
+  }
+
+  private once(externalId: string | null, make: () => Item): InsertResult {
+    const existing = (): InsertResult | null => {
+      const e = externalId === null ? null : this.findByExternalId(externalId);
+      return e ? { item: e, duplicate: true } : null;
+    };
+    const first = existing();
+    if (first) return first;
+    try {
+      return { item: make(), duplicate: false };
+    } catch (e) {
+      const again = /UNIQUE constraint failed: items\.external_id/.test(e instanceof Error ? e.message : '') ? existing() : null; // another process won the race
+      if (again) return again;
+      throw e;
+    }
   }
 
   insert(item: Item, tags: string[] = []): void {
@@ -256,6 +304,7 @@ export class Store {
     if (status !== null) { where.push('status = ?'); params.push(status); }
     if (f.dueBefore !== undefined) { where.push('due_at IS NOT NULL AND due_at < ?'); params.push(toDbDate(f.dueBefore)); }
     if (f.inboxOnly) where.push('inbox = 1');
+    if (f.externalId !== undefined) { where.push('external_id = ?'); params.push(f.externalId); }
     if (f.tag !== undefined) { where.push('id IN (SELECT item_id FROM item_tags WHERE tag = ?)'); params.push(f.tag); }
     if (!f.includeSnoozed) { where.push('(snoozed_until IS NULL OR snoozed_until <= ?)'); params.push(toDbDate(now)); }
     const sql = `SELECT * FROM items ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY pinned DESC, due_at IS NULL, due_at ASC, created_at DESC`;
@@ -377,6 +426,33 @@ export class Store {
 
   interactions(personId: string, limit = 10): Interaction[] {
     return all(this.db, 'SELECT * FROM interactions WHERE person_id = ? ORDER BY occurred_at DESC LIMIT ?', personId, limit).map(interactionFromRow);
+  }
+
+  /** Past 1:1s of a person (kind '1on1'), newest first, each with the items recorded in it (any status, in creation order). */
+  interactionHistory(personId: string, limit = 10, _now: number = Date.now()): InteractionWithItems[] {
+    return all(this.db, "SELECT * FROM interactions WHERE person_id = ? AND kind = '1on1' ORDER BY occurred_at DESC, rowid DESC LIMIT ?", personId, limit)
+      .map(interactionFromRow)
+      .map((interaction) => ({
+        interaction,
+        items: all(this.db, 'SELECT * FROM items WHERE interaction_id = ? ORDER BY created_at, rowid', interaction.id).map(itemFromRow),
+      }));
+  }
+
+  /**
+   * Ends a 1:1: logs it (kind '1on1', occurredAt = now, `notes` trimmed, empty = none) and links `itemIds` to it.
+   * `startedAt` is accepted for the caller's bookkeeping and not stored: an Interaction has one timestamp.
+   */
+  logOneOnOne(personId: string, notes: string, itemIds: string[], _startedAt?: number, now: number = Date.now()): Interaction {
+    return write(this.db, () => {
+      const x = this.logInteraction(personId, '1on1', notes.trim() === '' ? null : notes.trim(), now);
+      this.linkItemsToInteraction(x.id, itemIds);
+      return x;
+    });
+  }
+
+  /** Records that these items were created in that 1:1. Unknown ids are ignored; an item already linked moves to this one. */
+  linkItemsToInteraction(interactionId: string, itemIds: string[]): void {
+    write(this.db, () => { for (const id of itemIds) run(this.db, 'UPDATE items SET interaction_id = ? WHERE id = ?', interactionId, id); });
   }
 
   // ---- search ----

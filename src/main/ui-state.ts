@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { THEMES } from '../shared/themes-meta';
 import type { AccentChoice, AppearanceChoice, Density, PeopleLayout, PeopleSort, TodayGroup, UiState } from '../shared/api';
 
 export const DEFAULT_UI: UiState = {
@@ -10,7 +11,7 @@ export const DEFAULT_UI: UiState = {
   lastNav: 'today', sidebarHidden: false, todayGroup: 'section', todayFocus: false, peopleLayout: 'list', peopleSort: 'name',
   soundSave: 'Tink', soundComplete: 'Glass', soundUndo: 'Pop', welcomeSeen: false, lastSeenVersion: null, autoUpdateCheck: true,
   dismissedCheckIns: { day: '', ids: [] },
-  trayText: 'count', pauseUntil: null, wrapupDay: '', burstDay: '', showDates: true,
+  trayText: 'count', pauseUntil: null, wrapupDay: '', burstDay: '', showDates: true, theme: 'classic',
 };
 
 const ENUMS: Partial<Record<keyof UiState, readonly string[]>> = {
@@ -21,7 +22,14 @@ const ENUMS: Partial<Record<keyof UiState, readonly string[]>> = {
   peopleLayout: ['list', 'grid'] satisfies PeopleLayout[],
   peopleSort: ['name', 'urgency', 'last'] satisfies PeopleSort[],
   trayText: ['count', 'next'] satisfies Array<UiState['trayText']>,
+  theme: THEMES.map((t) => t.id),
 };
+
+/** nativeTheme.themeSource for the saved preferences: a fixed light or dark theme decides, Classic follows the Appearance choice. */
+export function themeSource(u: Pick<UiState, 'theme' | 'appearance'>): AppearanceChoice {
+  const mode = THEMES.find((t) => t.id === u.theme)?.mode;
+  return mode === 'dark' || mode === 'light' ? mode : u.appearance;
+}
 
 const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
 

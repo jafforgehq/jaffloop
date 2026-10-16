@@ -6,10 +6,13 @@ import type { CaptureTemplate, Item, Settings } from '../../shared/types';
 import { Icon } from '../components/icons';
 import { ItemRow } from '../components/item-row';
 import { GhostButton, IconButton, Segmented } from '../components/ui';
+import { ThemePicker } from '../components/theme-picker';
 import { UpdatePanel } from '../components/update-panel';
 import { Fmt } from '../core';
 import { api, info, pauseNotifications, saveSettings, savePerson, settings, snapshot, summaries, ui } from '../model';
 import { normalizeJiraBase, pausedUntilLabel, savableTemplates, templateLines, toDraft, tomorrowAt9, validateTemplateName, type TemplateDraft } from '../speed-logic';
+import { ClaudePrompts } from './claude-prompts';
+import { accentFor } from '../themes';
 import { HotkeyRecorder } from './hotkey-recorder';
 import { useReady } from './util';
 
@@ -63,6 +66,7 @@ function sample(): Item {
     id: 'sample', kind: 'owe', title: 'Review RFC for the on-call rotation', body: 'Sara asked for comments before Friday', quote: null, personId: null, status: 'open',
     dueAt: tomorrow, dueHasTime: false, remindAt: null, snoozedUntil: null, snoozeCount: 0, recurRule: null, pinned: false, inbox: false, source: 'hotkey',
     createdAt: Date.now(), updatedAt: Date.now(), completedAt: null, lastTouchedAt: Date.now(),
+    externalId: null, sourceLabel: null, sourceUrl: null, interactionId: null,
   };
 }
 
@@ -87,15 +91,16 @@ function General() {
     <>
       <Group>
         <Row label="Capture hotkey"><HotkeyRecorder /></Row>
-        <Row label="Appearance">
-          <select class="input" style={{ width: 120 }} aria-label="Appearance" value={u.appearance} onChange={(e) => void api.setUiState({ appearance: (e.target as HTMLSelectElement).value as AppearanceChoice })}>
+        <div class="form-row stack"><div>Theme</div><ThemePicker /></div>
+        <Row label="Appearance" hint={u.theme !== 'classic' ? 'Classic follows macOS; other themes are always light or dark' : undefined}>
+          <select class="input" style={{ width: 120 }} aria-label="Appearance" disabled={u.theme !== 'classic'} value={u.appearance} onChange={(e) => void api.setUiState({ appearance: (e.target as HTMLSelectElement).value as AppearanceChoice })}>
             <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
           </select>
         </Row>
         <Row label="Accent">
           <span class="row-flex gap10">
             {ACCENTS.map((a) => (
-              <button type="button" key={a.id} class={`swatch ${u.accent === a.id ? 'on' : ''}`} style={{ background: a.color }} title={a.label} aria-label={`${a.label} accent`} aria-pressed={u.accent === a.id} onClick={() => void api.setUiState({ accent: a.id })} />
+              <button type="button" key={a.id} class={`swatch ${u.accent === a.id ? 'on' : ''}`} style={{ background: accentFor(u.theme, a.id, matchMedia('(prefers-color-scheme: dark)').matches) }} title={a.label} aria-label={`${a.label} accent`} aria-pressed={u.accent === a.id} onClick={() => void api.setUiState({ accent: a.id })} />
             ))}
           </span>
         </Row>
@@ -103,7 +108,7 @@ function General() {
         <div class="density-previews">
           {DENSITIES.map((d) => (
             <div key={d.value} class={`density-preview ${density === d.value ? 'on' : ''}`}>
-              <div class="caps" style={{ fontSize: 10, padding: '4px 8px 0' }}>{d.label}</div>
+              <div class="caps" style={{ fontSize: 11, padding: '4px 8px 0' }}>{d.label}</div>
               <div style={{ pointerEvents: 'none' }}><ItemRow item={sample()} showPerson={false} densityOverride={d.value} /></div>
             </div>
           ))}
@@ -214,6 +219,8 @@ function Mcp() {
           <span class="dim" style={{ fontSize: 11 }}>Claude Code. For Claude Desktop add the same binary as a stdio server.</span>
         </div>
       </Group>
+      <h3 class="set-h">Ready-made prompts</h3>
+      <ClaudePrompts />
       <Group title="Privacy">
         <Row label="Read-only: block all write tools"><Switch label="Read-only" on={settings.value.mcpReadOnly} onChange={(v) => void saveSettings({ mcpReadOnly: v })} /></Row>
         {summaries.value.map((x) => (

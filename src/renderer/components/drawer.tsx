@@ -21,6 +21,15 @@ function Field({ label, children }: { label: string; children: ComponentChildren
   );
 }
 
+/** Where an imported item came from (outlook, jira…). Opens the link when there is one; the external id is in the tooltip. */
+function SourceChip({ item }: { item: Item }) {
+  const label = item.sourceLabel ?? 'imported';
+  const tip = [item.externalId && `id: ${item.externalId}`, item.sourceUrl].filter(Boolean).join('\n') || undefined;
+  return item.sourceUrl
+    ? <button type="button" class="chip src-chip" title={tip} aria-label={`Open in ${label}`} onClick={() => { void api.openExternal(item.sourceUrl!); }}>{label}<Icon name="arrowup-right" size={10} /></button>
+    : <span class="chip" title={tip}>{label}</span>;
+}
+
 export function ItemDrawer({ item }: { item: Item }) {
   const [title, setTitle] = useState(item.title);
   const [bodyText, setBodyText] = useState(item.body ?? '');
@@ -120,7 +129,12 @@ export function ItemDrawer({ item }: { item: Item }) {
         <Field label="Created">{Fmt.short(item.createdAt, 'd MMM yyyy')}</Field>
         <Field label="Last touched">{Fmt.short(item.lastTouchedAt, 'd MMM yyyy')}</Field>
         {item.snoozeCount > 0 && <Field label="Snoozed"><span style={{ color: Fmt.isSlipping(item) ? 'var(--clay)' : undefined }}>{item.snoozeCount} time{item.snoozeCount === 1 ? '' : 's'}</span></Field>}
-        <Field label="Source">{item.source}</Field>
+        <Field label="Source">
+          <span class="row-flex gap8">
+            {item.source}
+            {(item.sourceLabel || item.externalId) && <SourceChip item={item} />}
+          </span>
+        </Field>
         <Field label="Tags">
           <input class="drawer-tags" placeholder="tag, tag" aria-label="Tags" value={tagText}
             onInput={(e) => { tagsDirty.current = true; setTagText((e.target as HTMLInputElement).value); }} onBlur={commitTags}

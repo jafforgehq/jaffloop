@@ -58,9 +58,13 @@ Capture in one line. Everything stays on your Mac. Claude can read and write you
 | --- | --- |
 | ![Weekly review](docs/screenshots/review.png) | ![Capture context](docs/screenshots/capture-context.png) |
 
-| Jump to a person (⌘P) | |
+| 1:1 history with notes and action items | Claude prompts (Copy) |
 | --- | --- |
-| ![People palette](docs/screenshots/people-palette.png) | |
+| ![1:1 history](docs/screenshots/person-history.png) | ![Claude prompts](docs/screenshots/settings-prompts.png) |
+
+| Jump to a person (⌘P) | Seven themes |
+| --- | --- |
+| ![People palette](docs/screenshots/people-palette.png) | ![Midnight](docs/screenshots/theme-midnight-today.png) |
 
 | Keyboard shortcuts (press ?) | First run |
 | --- | --- |
@@ -136,7 +140,11 @@ claude mcp add jaffloop -- /Applications/Jaffloop.app/Contents/MacOS/jaffloop-mc
 
 For Claude Desktop, add the same binary as a stdio server in its MCP config. Then ask things like "Prep me for my 1:1 with Amir" or "What did I promise Sara this month?".
 
-Tools: `capture`, `add_item`, `list_items`, `get_person`, `list_people`, `complete_item`, `snooze_item`, `update_item`, `log_interaction`, `search`, `prep_brief`, `week_summary`. Resources: `jaffloop://today`, `jaffloop://ledger`, `jaffloop://person/{handle}`.
+Tools: `capture`, `add_item`, `add_items`, `list_items`, `get_person`, `list_people`, `complete_item`, `snooze_item`, `update_item`, `log_interaction`, `search`, `prep_brief`, `week_summary`. Resources: `jaffloop://today`, `jaffloop://ledger`, `jaffloop://person/{handle}`.
+
+Ready-made prompts: the server also offers ten prompts (a Monday sweep of what you promised, Jira mentions, meeting notes to items, a 1:1 prep, a Friday status and more). In Claude Code they appear as slash commands named `/mcp__jaffloop__<id>`, in Claude Desktop under the + menu. Settings, then Claude (MCP), lists them with a Copy button for any other chat.
+
+Imports never duplicate: `add_item`, `add_items` (up to 100 items in one call) and `capture` take an optional `external_id` (for example `outlook:<message id>` or `jira:PLAT-482:<comment id>`), plus `source_label` and `source_url`. An item whose `external_id` already exists, open, done or dropped, is skipped and reported as a duplicate, so running a sweep twice creates no copies. The item drawer shows the source as a chip that opens the link. `log_interaction` also takes `action_items`, which are created and linked to that 1:1.
 
 Privacy: people marked hidden are excluded from every tool and resource. Read-only mode blocks every write tool. There is no delete tool. Writes are tagged `source = mcp` and listed in the audit log. The app refreshes within a second when the server writes.
 

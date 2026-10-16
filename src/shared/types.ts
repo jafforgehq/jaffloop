@@ -31,6 +31,14 @@ export interface Item {
   updatedAt: number;
   completedAt: number | null;
   lastTouchedAt: number;
+  /** where it came from, e.g. 'outlook:<message id>', 'jira:PLAT-482:<comment id>'; unique when set, so a repeated import is skipped */
+  externalId: string | null;
+  /** short source name shown as a chip: 'outlook', 'jira', 'confluence', 'teams', ... */
+  sourceLabel: string | null;
+  /** link back to the source (opened in the browser) */
+  sourceUrl: string | null;
+  /** the 1:1 (Interaction id) this item was recorded in, so the 1:1 history can list its action items */
+  interactionId: string | null;
 }
 
 export interface Person {
@@ -124,6 +132,8 @@ export interface ItemFilter {
   staleDays?: number;
   tag?: string;
   inboxOnly?: boolean;
+  /** exact match on Item.externalId */
+  externalId?: string;
   includeSnoozed?: boolean;
   limit?: number;
 }
@@ -238,4 +248,12 @@ export interface UpcomingDate {
 export interface LinkSegment {
   text: string;
   href?: string;
+}
+
+// ---------------------------------------------------------------- 0.3.0
+
+/** One past 1:1 with the notes written for it and the action items recorded in it (any status). */
+export interface InteractionWithItems {
+  interaction: Interaction;
+  items: Item[];
 }

@@ -11,7 +11,7 @@ const person = (id: string, name: string, extra: Partial<Person> = {}): Person =
 const sum = (p: Person, daysSinceLast: number | null = 3): PersonSummary => ({ person: p, lastInteraction: null, openOwe: 0, openWait: 0, daysSinceLast, cadenceOverdue: false });
 const item = (id: string, personId: string | null, extra: Partial<Item> = {}): Item => ({
   id, kind: 'owe', title: id, body: null, quote: null, personId, status: 'open', dueAt: null, dueHasTime: false, remindAt: null, snoozedUntil: null, snoozeCount: 0,
-  recurRule: null, pinned: false, inbox: false, source: 'hotkey', createdAt: 0, updatedAt: 0, completedAt: null, lastTouchedAt: 0, ...extra,
+  recurRule: null, pinned: false, inbox: false, source: 'hotkey', createdAt: 0, updatedAt: 0, completedAt: null, lastTouchedAt: 0, externalId: null, sourceLabel: null, sourceUrl: null, interactionId: null, ...extra,
 });
 const isPrefix = (w: string) => ['owe', 'wait', 'bring', 'todo', 'said', 'note', 'o', 'w', 'b', 't', 's', 'n'].includes(w);
 

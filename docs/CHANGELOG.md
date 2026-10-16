@@ -2,6 +2,14 @@
 
 Also shown inside the app (What's new). Newest first.
 
+## 0.3.0 (2026-10-16): Imports without duplicates, Claude prompts and 1:1 notes
+
+- No more duplicates when Claude imports: every item can carry an id from its source (Outlook, Jira, Confluence, Teams). A repeated sweep skips what is already there, and a new bulk tool adds many items at once.
+- Ten ready-made prompts for Claude (Monday sweep, waiting-on sweep, Jira mentions, meeting notes to items, 1:1 prep, Friday status, chase stale waits, slipping triage, who am I neglecting, review evidence). They show up as slash commands in Claude and are listed with Copy buttons in Settings → Claude (MCP).
+- 1:1 mode keeps meeting notes and the action items you capture. When you end the 1:1 it is logged, and each person page has a 1:1 history with the notes and the items from every meeting.
+- Clearer colours: dim text, labels and meta are brighter on every screen.
+- Seven themes you can switch in Settings → General: Classic (follows macOS), Graphite, Midnight, Forest, Daylight, Paper and High contrast.
+
 ## 0.2.0 (2026-10-15): Review, rhythm and small time-savers
 
 - Weekly review: one page with overdue promises, slipped items, stale waits, people past their 1:1 cadence and what you closed, with your kept-promise rate. Copy the week as Markdown for your status update.

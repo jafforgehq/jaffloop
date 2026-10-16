@@ -13,7 +13,8 @@ import { installMenu } from './menu';
 import { Notifier } from './notifications';
 import { nextTrayText } from './tray-text';
 import { TrayController } from './tray';
-import { readLegacyPrefs, UiStateStore } from './ui-state';
+import { resolveTokens } from '../renderer/themes';
+import { readLegacyPrefs, themeSource, UiStateStore } from './ui-state';
 import { UpdateService } from './update-service';
 import { Windows } from './windows';
 
@@ -64,6 +65,8 @@ if (!app.requestSingleInstanceLock()) {
 
 // ---------------------------------------------------------------- start
 
+const applyNativeTheme = (u: UiState): void => { nativeTheme.themeSource = themeSource(u); };
+
 async function start(): Promise<void> {
   fs.mkdirSync(userData, { recursive: true });
   try {
@@ -76,13 +79,13 @@ async function start(): Promise<void> {
 
   ui = new UiStateStore(path.join(userData, 'ui-state.json'));
   ui.onChange = (s: UiState, patch) => {
-    if (patch.appearance) nativeTheme.themeSource = patch.appearance;
+    if (patch.appearance || patch.theme) applyNativeTheme(s);
     if (patch.trayText !== undefined) refreshTray();
     if (patch.pauseUntil !== undefined) notifier?.reschedule();
     windows?.broadcast('ui-state', s);
   };
   await ui.load(isolated ? undefined : () => readLegacyPrefs());
-  nativeTheme.themeSource = ui.get().appearance;
+  applyNativeTheme(ui.get());
   { const p = ui.get().pauseUntil; if (p !== null && p <= Date.now()) ui.set({ pauseUntil: null }); } // a pause that ran out while the app was closed
 
   if (!app.isPackaged) {
@@ -105,6 +108,7 @@ async function start(): Promise<void> {
     rendererDir,
     boundsFile: path.join(userData, 'main-window.json'),
     trayBounds: () => tray.bounds(),
+    windowBackground: () => resolveTokens(ui.get().theme, nativeTheme.shouldUseDarkColors).bg,
     onPopoverBlurHide: () => { tray.lastBlurHide = Date.now(); },
   });
   hotkey = new Hotkey(() => windows.toggleCapture());

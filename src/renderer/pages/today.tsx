@@ -91,7 +91,7 @@ export function TodayPage() {
     <>
       <KindMix />
       <div class="row-flex gap10" style={{ marginTop: 14 }}>
-        <div style={focus ? { opacity: 0.5, pointerEvents: 'none' } : undefined}>
+        <div style={focus ? { opacity: 0.65, pointerEvents: 'none' } : undefined}>
           <Segmented<TodayGroup> label="Group by" value={group} onChange={(v) => { void api.setUiState({ todayGroup: v }); }}
             options={[{ value: 'section', label: 'Sections' }, { value: 'person', label: 'People' }, { value: 'kind', label: 'Kinds' }]} />
         </div>

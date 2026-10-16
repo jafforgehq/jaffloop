@@ -11,7 +11,7 @@ export function CadenceStripView({ person }: { person: Person }) {
     <div class="cadence-strip" role="img" aria-label={`1:1s in the last 12 weeks: ${weeks.filter(Boolean).length}`}>
       <span class="cap-sm">12 weeks</span>
       {weeks.map((met, i) => <span key={i} class={`wk ${met ? 'met' : ''}`} title={met ? '1:1 that week' : 'No 1:1 that week'} />)}
-      <span class="dim" style={{ fontSize: 10.5, marginLeft: 2 }}>now</span>
+      <span class="dim" style={{ fontSize: 11, marginLeft: 2 }}>now</span>
     </div>
   );
 }

@@ -82,6 +82,8 @@ export function createHandlers(c: IpcCtx): Handlers {
       });
     },
     logInteraction: (_e, personId, kind, notes): Interaction => write(() => c.store.logInteraction(personId, kind ?? '1on1', notes ?? null, now())),
+    interactionHistory: (_e, personId, limit) => c.store.interactionHistory(personId, limit ?? 10, now()),
+    logOneOnOne: (_e, personId, notes, itemIds, startedAt) => write(() => c.store.logOneOnOne(personId, notes, itemIds ?? [], startedAt, now())),
 
     review: (_e, from, to) => c.store.review(from, to, now()),
     keptRate: (_e, days) => c.store.keptRate(days, now()),

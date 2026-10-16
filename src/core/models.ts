@@ -22,6 +22,10 @@ export interface NewItem {
   pinned?: boolean;
   inbox?: boolean;
   source?: ItemSource;
+  externalId?: string | null;
+  sourceLabel?: string | null;
+  sourceUrl?: string | null;
+  interactionId?: string | null;
   now?: number;
 }
 
@@ -34,6 +38,7 @@ export function newItem(i: NewItem): Item {
     remindAt: i.remindAt ?? null, snoozedUntil: i.snoozedUntil ?? null, snoozeCount: i.snoozeCount ?? 0,
     recurRule: i.recurRule ?? null, pinned: i.pinned ?? false, inbox: i.inbox ?? false, source: i.source ?? 'hotkey',
     createdAt: now, updatedAt: now, completedAt: null, lastTouchedAt: now,
+    externalId: i.externalId ?? null, sourceLabel: i.sourceLabel ?? null, sourceUrl: i.sourceUrl ?? null, interactionId: i.interactionId ?? null,
   };
 }
 

@@ -11,6 +11,8 @@ export interface WindowsOptions {
   rendererDir: string;
   /** where the main window's bounds are remembered */
   boundsFile: string;
+  /** the theme's background colour, so opaque windows do not flash another shade while loading */
+  windowBackground?(): string;
   /** the tray icon's bounds, for anchoring the popover */
   trayBounds(): Rectangle | undefined;
   /** the popover closed by itself (lost focus) */
@@ -104,7 +106,7 @@ export class Windows {
       w = this.make('main', {}, {
         width: b?.width ?? 1080, height: b?.height ?? 700, x: b?.x, y: b?.y, minWidth: 940, minHeight: 560,
         title: 'Jaffloop', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
-        ...(solid ? { backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1b' : '#f7f6f3' } : { vibrancy: 'sidebar' as const, visualEffectState: 'followWindow' as const, backgroundColor: '#00000000' }),
+        ...(solid ? { backgroundColor: this.background() } : { vibrancy: 'sidebar' as const, visualEffectState: 'followWindow' as const, backgroundColor: '#00000000' }),
       });
       this.main = w;
       const save = debounce(() => { if (w && !w.isDestroyed() && !w.isMinimized() && !w.isFullScreen()) writeJsonAtomic(this.o.boundsFile, w.getBounds()); }, 400);
@@ -236,8 +238,10 @@ export class Windows {
   openMorning(): void { this.openBrief('morning', {}, 'Morning brief'); }
 
   private chrome(): Electron.BrowserWindowConstructorOptions {
-    return { backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1b' : '#f7f6f3' };
+    return { backgroundColor: this.background() };
   }
+
+  private background(): string { return this.o.windowBackground?.() ?? (nativeTheme.shouldUseDarkColors ? '#1c1c1b' : '#f7f6f3'); }
 
   // ------------------------------------------------------------ misc
 

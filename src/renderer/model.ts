@@ -4,7 +4,9 @@ import { batch, computed, signal } from '@preact/signals';
 import type { AppInfo, Nav, UiState, UpdateState } from '../shared/api';
 import type { Item, Person, PersonSummary, Snapshot } from '../shared/types';
 import { Fmt, NavHistory, PinOrder, nextOneOnOneAt, parseCapture, sortPeople } from './core';
+import { captureLine, loggedToast } from './oneonone-logic';
 import { nextOneOnOnePreset, nudgeText } from './speed-logic';
+import { applyUiTheme } from './themes';
 import { type SnoozePreset, snoozePresets as presetsAt } from './ui-logic';
 
 export const api = window.jaffloop;
@@ -21,7 +23,7 @@ const defaultUi: UiState = {
   density: 'comfortable', appearance: 'system', accent: 'graphite', pinnedPeople: [], collapsed: [], pinOrder: [], savedFilters: [], lastNav: 'today',
   sidebarHidden: false, todayGroup: 'section', todayFocus: false, peopleLayout: 'list', peopleSort: 'name', soundSave: 'Tink', soundComplete: 'Glass',
   soundUndo: 'Pop', welcomeSeen: true, lastSeenVersion: null, autoUpdateCheck: true, dismissedCheckIns: { day: '', ids: [] },
-  trayText: 'count', pauseUntil: null, wrapupDay: '', burstDay: '', showDates: true,
+  trayText: 'count', pauseUntil: null, wrapupDay: '', burstDay: '', showDates: true, theme: 'classic',
 };
 
 export const snapshot = signal<Snapshot>(emptySnapshot);
@@ -149,6 +151,7 @@ export async function initModel(): Promise<void> {
 
 function applyUi(u: UiState) {
   const h = document.documentElement;
+  applyUiTheme(u.theme, u.accent);
   h.dataset.accent = u.accent;
   h.dataset.density = u.density;
   document.body.classList.toggle('solid', matchMedia('(prefers-reduced-transparency: reduce)').matches);
@@ -410,3 +413,30 @@ export function copyNudge(i: Item) {
 }
 
 export const pauseNotifications = (until: number | null) => api.pauseNotifications(until);
+
+
+// ---- added by ui-1on1 (0.3.0)
+/** Like save(), but returns the created item (null for an empty line) so 1:1 mode can list what it captured. */
+export async function saveReturning(line: string): Promise<Item | null> {
+  if (!line.trim()) return null;
+  const item = await api.capture(line);
+  play(ui.value.soundSave);
+  await reload();
+  return item;
+}
+
+/** captureFor() that returns the created item. */
+export async function captureForReturning(p: Person, text: string): Promise<Item | null> {
+  const line = captureLine(p.handle, text, Fmt.isPrefix);
+  return line ? saveReturning(line) : null;
+}
+
+/** End a 1:1: log it with its notes, link the items captured during it, pulse the ring and toast. Returns the number of linked items. */
+export async function endOneOnOne(p: Person, notes: string, itemIds: string[], startedAt: number): Promise<number> {
+  await api.logOneOnOne(p.id, notes.trim(), itemIds, startedAt);
+  pulsePersonId.value = p.id;
+  await reload();
+  showToast(loggedToast(itemIds.length));
+  setTimeout(() => { if (pulsePersonId.value === p.id) pulsePersonId.value = null; }, 1000);
+  return itemIds.length;
+}

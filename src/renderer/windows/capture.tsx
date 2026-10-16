@@ -118,6 +118,7 @@ export function CaptureWindow() {
     id: 'preview', kind: parsed.kind, title: parsed.title || 'Untitled', body: null, quote: parsed.quote, personId: who?.id ?? null, status: 'open',
     dueAt: parsed.dueAt, dueHasTime: parsed.dueHasTime, remindAt: null, snoozedUntil: null, snoozeCount: 0, recurRule: null, pinned: parsed.pinned,
     inbox: parsed.inbox, source: 'hotkey', createdAt: Date.now(), updatedAt: Date.now(), completedAt: null, lastTouchedAt: Date.now(),
+    externalId: null, sourceLabel: null, sourceUrl: null, interactionId: null,
   };
 
   return (

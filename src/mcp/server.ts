@@ -12,7 +12,8 @@ import { newItem } from '../core/models';
 import { parseCapture } from '../core/parser';
 import { isOverdue, isSlipping, isStaleWait } from '../core/rules';
 import { hm } from '../core/settings';
-import { Store } from '../core/store';
+import { Store, type InsertResult, type ItemOrigin } from '../core/store';
+import { PROMPTS, renderPrompt } from '../shared/prompts';
 
 // Replaced by esbuild's `define` (scripts/build.mjs); undefined under vitest and plain tsc.
 declare const __JAFFLOOP_VERSION__: string | undefined;
@@ -20,9 +21,10 @@ export const mcpServerVersion: string = typeof __JAFFLOOP_VERSION__ === 'string'
 
 type J = Record<string, unknown>;
 
-const WRITE_TOOLS = new Set(['capture', 'add_item', 'complete_item', 'snooze_item', 'update_item', 'log_interaction']);
+const WRITE_TOOLS = new Set(['capture', 'add_item', 'add_items', 'complete_item', 'snooze_item', 'update_item', 'log_interaction']);
 const INTERACTION_KINDS: InteractionKind[] = ['1on1', 'meeting', 'chat', 'other'];
 const STATUSES: ItemStatus[] = ['open', 'done', 'dropped'];
+const MAX_BULK_ITEMS = 100;
 
 class MCPError extends Error {
   // The Swift server printed these with "\(error)" in resources/read errors (Swift's debug text also escapes '); keep that text.
@@ -128,12 +130,30 @@ export class MCPServer {
       case 'initialize':
         return ok({
           protocolVersion: asStr(params.protocolVersion) ?? '2025-03-26',
-          capabilities: { tools: {}, resources: {} },
+          capabilities: { tools: {}, resources: {}, prompts: {} },
           serverInfo: { name: 'jaffloop', version: mcpServerVersion },
         });
       case 'ping': return ok({});
       case 'tools/list': return ok({ tools: TOOL_DEFS });
       case 'tools/call': return ok(this.callTool(asStr(params.name) ?? '', isObj(params.arguments) ? params.arguments : {}));
+      case 'prompts/list':
+        return ok({
+          prompts: PROMPTS.map((p) => ({
+            name: p.id, title: p.title, description: p.description,
+            arguments: p.arguments.map((x) => ({ name: x.name, description: x.description, required: x.required })),
+          })),
+        });
+      case 'prompts/get': {
+        const p = PROMPTS.find((x) => x.id === asStr(params.name));
+        if (!p) return err(-32602, `Unknown prompt: ${asStr(params.name) ?? ''}`);
+        const given: Record<string, string> = {};
+        if (isObj(params.arguments)) {
+          for (const [k, v] of Object.entries(params.arguments)) if (typeof v === 'string' || typeof v === 'number') given[k] = String(v);
+        }
+        const missing = p.arguments.filter((x) => x.required && !given[x.name]?.trim()).map((x) => x.name);
+        if (missing.length > 0) return err(-32602, `Missing required argument${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}`);
+        return ok({ description: p.description, messages: [{ role: 'user', content: { type: 'text', text: renderPrompt(p, given) } }] });
+      }
       case 'resources/list':
         return ok({
           resources: [
@@ -159,13 +179,13 @@ export class MCPServer {
   // ---- tools ----
 
   callTool(name: string, a: J): J {
-    const wrote = WRITE_TOOLS.has(name);
-    if (wrote && this.store.settings().mcpReadOnly) {
+    const isWrite = WRITE_TOOLS.has(name);
+    if (isWrite && this.store.settings().mcpReadOnly) {
       this.store.audit(name, 'blocked: read-only mode', false, this.now());
       return result('Jaffloop is in read-only mode for Claude. Change this in Settings > MCP.', true);
     }
     try {
-      const [value, summary] = this.run(name, a);
+      const [value, summary, wrote = isWrite] = this.run(name, a);
       this.store.audit(name, summary, wrote, this.now());
       return result(prettyJson(value));
     } catch (e) {
@@ -231,6 +251,9 @@ export class MCPServer {
     if (i.body !== null) d.body = i.body;
     if (i.quote !== null) d.quote = i.quote;
     if (i.dueAt !== null) { d.due = i.dueHasTime ? isoString(i.dueAt) : this.dayString(i.dueAt); d.overdue = isOverdue(i, now); }
+    if (i.externalId !== null) d.external_id = i.externalId;
+    if (i.sourceLabel !== null) d.source_label = i.sourceLabel;
+    if (i.sourceUrl !== null) d.source_url = i.sourceUrl;
     if (i.remindAt !== null) d.remind_at = isoString(i.remindAt);
     if (i.snoozedUntil !== null && i.snoozedUntil > now) d.snoozed_until = isoString(i.snoozedUntil);
     if (i.recurRule !== null) d.recurrence = i.recurRule;
@@ -253,7 +276,54 @@ export class MCPServer {
     return d;
   }
 
-  private run(name: string, a: J): [unknown, string] {
+  /** external_id, source_label, source_url from tool arguments; blank strings count as not given. */
+  private origin(a: J, interactionId: string | null = null): ItemOrigin {
+    const t = (v: unknown): string | null => { const x = asStr(v)?.trim(); return x ? x : null; };
+    return { externalId: t(a.external_id), sourceLabel: t(a.source_label), sourceUrl: t(a.source_url), interactionId };
+  }
+
+  /** A duplicate never exposes an item of a hidden person (not even its id). */
+  private duplicateJSON(r: InsertResult): J {
+    const hidden = r.item.personId !== null && this.store.hiddenPersonIds().has(r.item.personId);
+    return hidden ? { duplicate: true } : { duplicate: true, id: r.item.id, item: this.itemJSON(r.item) };
+  }
+
+  /** Validates add_item style arguments and writes the item unless its external_id already exists. Throws MCPError for bad input. */
+  private addOne(a: J, t: number, interactionId: string | null = null): { r: InsertResult; kind: ItemKind; title: string } {
+    const kind = inList(ITEM_KINDS, a.kind);
+    if (!kind) throw new MCPError('kind must be one of owe, wait, bring, task, said, note');
+    const title = asStr(a.title);
+    if (!title) throw new MCPError('title is required');
+    const p = this.personFor(a.person);
+    const due = this.date(a.due);
+    const item = newItem({
+      kind, title, body: asStr(a.body) ?? null, quote: asStr(a.quote) ?? null, personId: p?.id ?? null, dueAt: due,
+      dueHasTime: asStr(a.due)?.includes(':') ?? false, remindAt: this.date(a.remind_at),
+      inbox: due === null && p === null && (['task', 'owe', 'wait', 'bring'] as ItemKind[]).includes(kind), source: 'mcp', now: t,
+      recurRule: asStr(a.recurrence) ?? null, ...this.origin(a, interactionId),
+    });
+    return { r: this.store.insertOnce(item, asStrings(a.tags) ?? []), kind, title };
+  }
+
+  /** Runs addOne over a list; one bad entry never stops the others. */
+  private addMany(list: unknown[], t: number, interactionId: string | null = null): J {
+    let created = 0, duplicates = 0, errors = 0;
+    const results = list.map((x, index): J => {
+      try {
+        if (!isObj(x)) throw new MCPError('item must be an object');
+        const { r } = this.addOne(x, t, interactionId);
+        if (r.duplicate) { duplicates++; const d = this.duplicateJSON(r); return { index, status: 'duplicate', ...(d.id === undefined ? {} : { id: d.id }) }; }
+        created++;
+        return { index, status: 'created', id: r.item.id };
+      } catch (e) {
+        errors++;
+        return { index, status: 'error', error: errText(e) };
+      }
+    });
+    return { created, duplicates, errors, results };
+  }
+
+  private run(name: string, a: J): [unknown, string, boolean?] {
     const t = this.now();
     const store = this.store;
     switch (name) {
@@ -264,24 +334,25 @@ export class MCPServer {
         if (parsed.personHandle !== null && store.person(parsed.personHandle, false)?.hiddenFromClaude) {
           throw new MCPError(`No person with handle '${parsed.personHandle}'.`);
         }
-        const i = store.create(parsed, 'mcp', t);
-        return [this.itemJSON(i), `capture: ${i.kind} "${i.title}"`];
+        const origin = this.origin(a);
+        if (origin.externalId === null && origin.sourceLabel === null && origin.sourceUrl === null) {
+          const i = store.create(parsed, 'mcp', t);
+          return [this.itemJSON(i), `capture: ${i.kind} "${i.title}"`];
+        }
+        const r = store.createOnce(parsed, 'mcp', t, origin);
+        if (r.duplicate) return [this.duplicateJSON(r), `capture: duplicate ${origin.externalId}`, false];
+        return [this.itemJSON(r.item), `capture: ${r.item.kind} "${r.item.title}"`];
       }
       case 'add_item': {
-        const kind = inList(ITEM_KINDS, a.kind);
-        if (!kind) throw new MCPError('kind must be one of owe, wait, bring, task, said, note');
-        const title = asStr(a.title);
-        if (!title) throw new MCPError('title is required');
-        const p = this.personFor(a.person);
-        const due = this.date(a.due);
-        const item = newItem({
-          kind, title, body: asStr(a.body) ?? null, quote: asStr(a.quote) ?? null, personId: p?.id ?? null, dueAt: due,
-          dueHasTime: asStr(a.due)?.includes(':') ?? false, remindAt: this.date(a.remind_at),
-          inbox: due === null && p === null && (['task', 'owe', 'wait', 'bring'] as ItemKind[]).includes(kind), source: 'mcp', now: t,
-          recurRule: asStr(a.recurrence) ?? null,
-        });
-        store.insert(item, asStrings(a.tags) ?? []);
-        return [this.itemJSON(item), `add_item: ${kind} "${title}"`];
+        const { r, kind, title } = this.addOne(a, t);
+        if (r.duplicate) return [this.duplicateJSON(r), `add_item: duplicate ${r.item.externalId}`, false];
+        return [this.itemJSON(r.item), `add_item: ${kind} "${title}"`];
+      }
+      case 'add_items': {
+        if (!Array.isArray(a.items) || a.items.length === 0) throw new MCPError('items is required: a non-empty array');
+        if (a.items.length > MAX_BULK_ITEMS) throw new MCPError(`items: at most ${MAX_BULK_ITEMS} per call, got ${a.items.length}`);
+        const out = this.addMany(a.items, t);
+        return [out, `add_items: ${out.created} created, ${out.duplicates} duplicate, ${out.errors} error`, (out.created as number) > 0];
       }
       case 'list_items': {
         const f: ItemFilter = { includeSnoozed: true, limit: asInt(a.limit) ?? 50 };
@@ -291,6 +362,8 @@ export class MCPServer {
         if (p) f.personId = p.id;
         const st = asStr(a.status);
         f.status = st === undefined ? 'open' : (inList(STATUSES, st) ?? null); // "any" and unknown values mean any status
+        const ext = asStr(a.external_id)?.trim();
+        if (ext) { f.externalId = ext; if (st === undefined) f.status = null; } // looking an id up: find it whatever its status
         const before = this.date(a.due_before);
         if (before !== null) f.dueBefore = before;
         f.overdueOnly = asBool(a.overdue) ?? false;
@@ -350,8 +423,14 @@ export class MCPServer {
         const p = this.personFor(a.person);
         if (!p) throw new MCPError('person is required');
         const kind = inList(INTERACTION_KINDS, a.kind) ?? '1on1';
+        const actions = Array.isArray(a.action_items) ? a.action_items : [];
+        if (actions.length > MAX_BULK_ITEMS) throw new MCPError(`action_items: at most ${MAX_BULK_ITEMS} per call, got ${actions.length}`);
         const x = store.logInteraction(p.id, kind, asStr(a.notes) ?? null, this.date(a.occurred_at) ?? t);
-        return [{ id: x.id, person: p.handle, occurred_at: isoString(x.occurredAt) }, `log_interaction: ${p.handle}`];
+        const out: J = { id: x.id, person: p.handle, occurred_at: isoString(x.occurredAt) };
+        if (actions.length > 0) {
+          out.action_items = this.addMany(actions.map((x) => (isObj(x) && x.person === undefined ? { ...x, person: p.handle } : x)), t, x.id);
+        }
+        return [out, `log_interaction: ${p.handle}`];
       }
       case 'search': {
         const q = asStr(a.query);
@@ -456,16 +535,31 @@ const tool = (name: string, description: string, properties: J, required: string
   name, description, inputSchema: { type: 'object', properties, required },
 });
 
+// Source fields shared by capture, add_item and add_items: they make repeated imports safe.
+const EXTERNAL_ID_HELP = 'Stable id of the thing this item came from, e.g. `outlook:<message id>`, `jira:PLAT-482:<comment id>`, `confluence:<page id>`, `teams:<message id>`. ' +
+  'Unique across all items (open, done or dropped): when it already exists nothing is written and the existing item is returned with `duplicate: true`, so a repeated sweep never makes copies. Always set it when the item comes from mail, Jira, Confluence or chat.';
+const SOURCE_FIELDS: J = {
+  external_id: s(EXTERNAL_ID_HELP),
+  source_label: s("Short name of where it came from, shown as a chip: 'outlook', 'jira', 'confluence', 'teams'"),
+  source_url: s('Link back to the source (message, ticket or page URL)'),
+};
+const ITEM_FIELDS: J = {
+  kind: { type: 'string', enum: ['owe', 'wait', 'bring', 'task', 'said', 'note'] }, title: str, person: s('Person handle'),
+  due: s("ISO date/time, or a phrase like 'fri' or 'tomorrow 9:00'"), remind_at: s('ISO date/time'), tags: { type: 'array', items: str },
+  quote: s('Exact words (for said)'), body: str,
+};
+
 const TOOL_DEFS: J[] = [
-  tool('capture', 'Add an item from one line using Jaffloop capture syntax, e.g. `owe @sara review RFC fri`, `wait @amir API spec mon 10:00`, `said @sara "quote"`, `todo prepare plan thu #planning !`.', { text: s('The capture line') }, ['text']),
-  tool('add_item', 'Add an item with explicit fields.', { kind: { type: 'string', enum: ['owe', 'wait', 'bring', 'task', 'said', 'note'] }, title: str, person: s('Person handle'), due: s("ISO date/time, or a phrase like 'fri' or 'tomorrow 9:00'"), remind_at: s('ISO date/time'), tags: { type: 'array', items: str }, quote: s('Exact words (for said)'), body: str }, ['kind', 'title']),
-  tool('list_items', 'Query items. Defaults to open items.', { kind: str, person: s('Person handle'), status: s('open | done | dropped | any'), due_before: s('ISO date/time'), overdue: { type: 'boolean' }, stale_days: { type: 'integer', description: 'Not touched for N days' }, limit: { type: 'integer' } }),
+  tool('capture', 'Add an item from one line using Jaffloop capture syntax, e.g. `owe @sara review RFC fri`, `wait @amir API spec mon 10:00`, `said @sara "quote"`, `todo prepare plan thu #planning !`. Pass external_id when the line comes from an email, ticket or page so a repeat is skipped.', { text: s('The capture line'), ...SOURCE_FIELDS }, ['text']),
+  tool('add_item', 'Add an item with explicit fields. Pass external_id (e.g. `outlook:<message id>`, `jira:PLAT-482:<comment id>`) when it comes from another system: if that id is already in Jaffloop, even on a done or dropped item, nothing is written and the response is `{ "duplicate": true, "id", "item" }`.', { ...ITEM_FIELDS, ...SOURCE_FIELDS }, ['kind', 'title']),
+  tool('add_items', `Add up to ${MAX_BULK_ITEMS} items in one call (same fields as add_item per entry). Use it for sweeps of mail, Jira or notes, with an external_id on every entry (e.g. \`outlook:<message id>\`, \`jira:PLAT-482:<comment id>\`): ids that already exist, or repeat inside the call, are skipped, never reopened. Returns { created, duplicates, errors, results: [{ index, status: created | duplicate | error, id?, error? }] }; one bad entry does not stop the others.`, { items: { type: 'array', maxItems: MAX_BULK_ITEMS, items: { type: 'object', properties: { ...ITEM_FIELDS, ...SOURCE_FIELDS }, required: ['kind', 'title'] } } }, ['items']),
+  tool('list_items', 'Query items. Defaults to open items. With external_id it finds the item with that source id in any status (unless status is given), to check whether something was already imported.', { kind: str, person: s('Person handle'), status: s('open | done | dropped | any'), due_before: s('ISO date/time'), overdue: { type: 'boolean' }, stale_days: { type: 'integer', description: 'Not touched for N days' }, limit: { type: 'integer' }, external_id: s('Exact source id, e.g. outlook:<message id>') }),
   tool('get_person', "One person's profile, open items both ways, said log and recent interactions.", { handle: s('Person handle') }, ['handle']),
   tool('list_people', 'All people with cadence status.', { include_archived: { type: 'boolean' } }),
   tool('complete_item', 'Mark an item done. Recurring items create their next occurrence.', { id: str }, ['id']),
   tool('snooze_item', 'Hide an item until a time.', { id: str, until: s("ISO date/time or phrase like 'tomorrow 9:00'") }, ['id', 'until']),
   tool('update_item', 'Change fields on an item (title, body, quote, kind, status, pinned, person, due, remind_at, tags).', { id: str, fields: { type: 'object' } }, ['id', 'fields']),
-  tool('log_interaction', 'Record a 1:1 or meeting with a person.', { person: s('Person handle'), kind: { type: 'string', enum: ['1on1', 'meeting', 'chat', 'other'] }, notes: str, occurred_at: s('ISO date/time, defaults to now') }, ['person']),
+  tool('log_interaction', 'Record a 1:1 or meeting with a person. Optional action_items (up to 100, same fields as add_item incl. external_id) are created and linked to this interaction, so they show in the 1:1 history; person defaults to this person, duplicates by external_id are skipped.', { person: s('Person handle'), kind: { type: 'string', enum: ['1on1', 'meeting', 'chat', 'other'] }, notes: str, occurred_at: s('ISO date/time, defaults to now'), action_items: { type: 'array', maxItems: MAX_BULK_ITEMS, items: { type: 'object', properties: { ...ITEM_FIELDS, ...SOURCE_FIELDS }, required: ['kind', 'title'] } } }, ['person']),
   tool('search', 'Full-text search over titles, bodies and quotes.', { query: str, filters: { type: 'object', properties: { kind: str, person: str, before: str, status: str } } }, ['query']),
   tool('prep_brief', 'Structured data to prepare a conversation: open items both ways, talking points, recent said entries, cadence.', { person: s('Person handle') }, ['person']),
   tool('week_summary', 'Created, completed, slipped and stale items for a range (defaults to the last 7 days).', { from: s('ISO date'), to: s('ISO date') }),

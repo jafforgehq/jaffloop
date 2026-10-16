@@ -4,6 +4,7 @@ import type { Item, Person, PersonSummary, Relation } from '../../shared/types';
 import { RELATIONS } from '../../shared/types';
 import { CadenceStripView } from '../components/cadence-strip';
 import { Icon } from '../components/icons';
+import { InteractionHistory } from '../components/interaction-history';
 import { ItemList } from '../components/item-row';
 import { NotesField } from '../components/notes-field';
 import { OneOnOne, SaidRow, useSaidLog } from '../components/one-on-one';
@@ -83,6 +84,7 @@ function PersonBody({ s, startOneOnOne }: { s: PersonSummary; startOneOnOne: () 
         {said.length === 0
           ? <EmptySection title="Said log" message="Nothing logged yet." />
           : <div class="section"><SectionHeader title="Said log" count={said.length} />{said.slice(0, 12).map((i) => <SaidRow key={i.id} item={i} />)}</div>}
+        <InteractionHistory person={p} />
       </Page>
       <div class="quick-add">
         <div class="quick-field">

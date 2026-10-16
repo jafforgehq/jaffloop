@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
-import { MIGRATIONS, Store, fromDbDate, openDatabase, toDbDate } from '../src/core';
+import { MIGRATIONS, Store, fromDbDate, newItem, openDatabase, toDbDate } from '../src/core';
 
 const FIX = join(__dirname, 'fixtures');
 const dir = mkdtempSync(join(tmpdir(), 'jaffloop-compat-'));
@@ -19,7 +19,7 @@ function copyFixture(name: string): string {
 const schema = (db: DatabaseSync) => (db.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all());
 const migrations = (db: DatabaseSync) => (db.prepare('SELECT identifier FROM grdb_migrations ORDER BY identifier').all() as Array<{ identifier: string }>).map((r) => r.identifier);
 
-const ALL_MIGRATIONS = ['v1', 'v2-person-notes', 'v3-person-dates'];
+const ALL_MIGRATIONS = ['v1', 'v2-person-notes', 'v3-person-dates', 'v4-external-ids'];
 const hasSqlite3 = spawnSync('sqlite3', ['--version']).status === 0;
 // the sqlite3 CLI on some machines (GitHub's macOS runners) is built without FTS5
 const cliHasFts5 = hasSqlite3 && spawnSync('sqlite3', [':memory:', 'create virtual table t using fts5(a)']).status === 0;
@@ -41,13 +41,17 @@ describe('GRDB dates', () => {
   });
 });
 
-/** The Swift v2 fixture plus the 0.2.0 columns, as ALTER TABLE leaves them: what every database must look like now. */
-function v3Schema(): ReturnType<typeof schema> {
+const V4_ALTERS = `ALTER TABLE "items" ADD COLUMN "external_id" TEXT; ALTER TABLE "items" ADD COLUMN "source_label" TEXT; ALTER TABLE "items" ADD COLUMN "source_url" TEXT;
+  ALTER TABLE "items" ADD COLUMN "interaction_id" TEXT; CREATE UNIQUE INDEX "items_external_id" ON "items"("external_id") WHERE "external_id" IS NOT NULL`;
+
+/** The Swift v2 fixture plus the 0.2.0 and 0.3.0 columns, as ALTER TABLE leaves them: what every database must look like now. */
+function v4Schema(): ReturnType<typeof schema> {
   const db = new DatabaseSync(':memory:');
   const fixture = new DatabaseSync(join(FIX, 'swift-v2.sqlite'), { readOnly: true });
   for (const r of fixture.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'items_fts_%' ORDER BY rowid").all() as Array<{ sql: string }>) db.exec(r.sql);
   fixture.close();
   db.exec('ALTER TABLE "people" ADD COLUMN "start_date" TEXT; ALTER TABLE "people" ADD COLUMN "birthday" TEXT');
+  db.exec(V4_ALTERS);
   const out = schema(db);
   db.close();
   return out;
@@ -93,15 +97,16 @@ describe('opening a database made by the Swift app (v2)', () => {
     expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
     db.close();
   });
-  it('only adds the v3 person columns to the schema, and keeps all data', () => {
+  it('only adds the v3 person columns and the v4 item columns to the schema, and keeps all data', () => {
     const fixture = new DatabaseSync(join(FIX, 'swift-v2.sqlite'), { readOnly: true });
     const before = fixture.prepare('SELECT * FROM people ORDER BY id').all() as Array<Record<string, unknown>>;
     const nItems = (fixture.prepare('SELECT COUNT(*) c FROM items').get() as { c: number }).c;
     fixture.close();
     const db = openDatabase(copyFixture('swift-v2.sqlite'));
-    expect(schema(db)).toEqual(v3Schema());
+    expect(schema(db)).toEqual(v4Schema());
     expect(db.prepare('SELECT * FROM people ORDER BY id').all()).toEqual(before.map((p) => ({ ...p, start_date: null, birthday: null })));
     expect(db.prepare('SELECT COUNT(*) c FROM items').get()).toEqual({ c: nItems });
+    expect(db.prepare('SELECT COUNT(*) c FROM items WHERE external_id IS NOT NULL OR source_label IS NOT NULL OR source_url IS NOT NULL OR interaction_id IS NOT NULL').get()).toEqual({ c: 0 });
     db.close();
   });
   it('person dates, Jira base and capture templates survive a round trip', () => {
@@ -136,8 +141,8 @@ describe('migrating a v1 database', () => {
     expect(store.search('RFC')).toHaveLength(1);
     const p = store.person('sara')!; p.notes = 'hello'; store.savePerson(p);
     expect(store.person('sara')!.notes).toBe('hello');
-    // the ALTERs we run produce exactly the DDL GRDB produced, plus our two columns
-    expect(schema(db)).toEqual(v3Schema());
+    // the ALTERs we run produce exactly the DDL GRDB produced, plus our columns
+    expect(schema(db)).toEqual(v4Schema());
     db.close();
   });
   it('a v2 database (as the 0.1.0 app left it) moves to v3 with its people intact', () => {
@@ -155,11 +160,48 @@ describe('migrating a v1 database', () => {
   });
 });
 
+describe('migrating to v4 (0.3.0)', () => {
+  it('a v3 database (as 0.2.0 left it) moves to v4 keeping every item, and external ids become unique', () => {
+    const path = join(dir, 'v3-to-v4.sqlite');
+    const db = new DatabaseSync(path);
+    for (const m of MIGRATIONS.slice(0, 3)) db.exec(m.sql);
+    db.exec('CREATE TABLE grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)');
+    db.exec("INSERT INTO grdb_migrations VALUES ('v1'), ('v2-person-notes'), ('v3-person-dates')");
+    db.exec("INSERT INTO people(id, handle, name, start_date) VALUES ('P1', 'sara', 'Sara', '2024-03-04')");
+    db.exec(`INSERT INTO items(id, kind, title, person_id, created_at, updated_at, last_touched_at) VALUES ('I1', 'owe', 'keep me', 'P1', '2026-10-01 09:00:00.000', '2026-10-01 09:00:00.000', '2026-10-01 09:00:00.000')`);
+    db.close();
+    const migrated = openDatabase(path);
+    expect(migrations(migrated)).toEqual(ALL_MIGRATIONS);
+    const store = new Store(migrated);
+    expect(store.item('I1')).toMatchObject({ title: 'keep me', personId: 'P1', externalId: null, sourceLabel: null, sourceUrl: null, interactionId: null });
+    expect(store.person('sara', false)).toMatchObject({ startDate: '2024-03-04' });
+    expect(schema(migrated)).toEqual(v4Schema());
+    migrated.close();
+  });
+  it('the same database opened by two processes at once migrates once', () => {
+    const path = copyFixture('swift-v1.sqlite');
+    const a = openDatabase(path), b = openDatabase(path);
+    expect(migrations(a)).toEqual(ALL_MIGRATIONS);
+    expect(new Store(b).items({ status: null, includeSnoozed: true })).toHaveLength(8);
+    a.close(); b.close();
+  });
+  it('exportJSON carries the new fields only when set', () => {
+    const db = openDatabase(join(dir, 'export.sqlite'));
+    const store = new Store(db);
+    const plain = store.capture('todo plain');
+    const { item } = store.insertOnce(newItem({ kind: 'owe', title: 'from mail', externalId: 'outlook:1', sourceLabel: 'outlook', sourceUrl: 'https://x/1' }));
+    const items = JSON.parse(store.exportJSON()).items as Array<Record<string, unknown>>;
+    expect(items.find((i) => i.id === plain.id)).not.toHaveProperty('external_id');
+    expect(items.find((i) => i.id === item.id)).toMatchObject({ external_id: 'outlook:1', source_label: 'outlook', source_url: 'https://x/1' });
+    db.close();
+  });
+});
+
 describe('a new database', () => {
   it('has the same schema as a migrated Swift database, with every migration recorded', () => {
     const db = openDatabase(join(dir, 'sub', 'dir', 'new.sqlite'));    // creates the directories
     const fixture = new DatabaseSync(join(FIX, 'swift-v2.sqlite'), { readOnly: true });
-    expect(schema(db)).toEqual(v3Schema());
+    expect(schema(db)).toEqual(v4Schema());
     expect(migrations(db)).toEqual(ALL_MIGRATIONS);
     expect(MIGRATIONS.map((m) => m.id).sort()).toEqual(ALL_MIGRATIONS);
     expect(db.prepare('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'wal' });
@@ -221,7 +263,7 @@ describe.skipIf(!hasSqlite3)('rows we write, read through the sqlite3 CLI', () =
     expect(q('SELECT event, detail, at FROM item_events ORDER BY id')).toBe('created|mcp|2026-10-14 10:00:00.123\nsnoozed|2026-10-20T09:00:00Z|2026-10-14 10:00:00.123');
     expect(q("SELECT key, value FROM settings WHERE key IN ('eodTime','hotkey') ORDER BY key")).toBe('eodTime|16:00\nhotkey|Alt+Space');
     expect(q('SELECT tag FROM item_tags')).toBe('rfc');
-    expect(q('SELECT identifier FROM grdb_migrations ORDER BY identifier')).toBe('v1\nv2-person-notes\nv3-person-dates');
+    expect(q('SELECT identifier FROM grdb_migrations ORDER BY identifier')).toBe('v1\nv2-person-notes\nv3-person-dates\nv4-external-ids');
     expect(q('PRAGMA integrity_check')).toBe('ok');
     if (cliHasFts5) expect(q("SELECT COUNT(*) FROM items WHERE rowid IN (SELECT rowid FROM items_fts WHERE items_fts MATCH '\"rev\"*')")).toBe('1');
   });
