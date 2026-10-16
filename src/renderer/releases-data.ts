@@ -5,6 +5,11 @@ export interface RoadmapGroup { title: string; blurb: string; items: string[] }
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.3.1', date: '2026-10-16', title: 'Smoother completing', highlights: [
+      'Fixes freezes: completing an item no longer lags, and the app menu (Settings…) and menu bar stay clickable.',
+    ],
+  },
+  {
     version: '0.3.0', date: '2026-10-16', title: 'Imports without duplicates, Claude prompts and 1:1 notes', highlights: [
       'No more duplicates when Claude imports: every item can carry an id from its source (Outlook, Jira, Confluence, Teams). A repeated sweep skips what is already there, and a new bulk tool adds many items at once.',
       'Ten ready-made prompts for Claude (Monday sweep, waiting-on sweep, Jira mentions, meeting notes to items, 1:1 prep, Friday status, chase stale waits, slipping triage, who am I neglecting, review evidence). They show up as slash commands in Claude and are listed with Copy buttons in Settings → Claude (MCP).',

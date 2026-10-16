@@ -2,6 +2,10 @@
 
 Also shown inside the app (What's new). Newest first.
 
+## 0.3.1 (2026-10-16): Smoother completing
+
+- Fixes freezes: completing an item no longer lags, and the app menu (Settings…) and menu bar stay clickable.
+
 ## 0.3.0 (2026-10-16): Imports without duplicates, Claude prompts and 1:1 notes
 
 - No more duplicates when Claude imports: every item can carry an id from its source (Outlook, Jira, Confluence, Teams). A repeated sweep skips what is already there, and a new bulk tool adds many items at once.

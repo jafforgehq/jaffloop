@@ -144,7 +144,7 @@ export class Windows {
       fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, type: 'panel', backgroundColor: '#00000000',
     });
     w.setAlwaysOnTop(true, 'floating');
-    w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
     w.on('blur', () => { if (!w!.isDestroyed()) w!.hide(); });
     this.capture = w;
     return w;
@@ -188,7 +188,7 @@ export class Windows {
       fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, backgroundColor: '#00000000',
     });
     w.setAlwaysOnTop(true, 'pop-up-menu');
-    w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
     w.on('blur', () => { if (!w.isDestroyed() && w.isVisible()) { w.hide(); this.o.onPopoverBlurHide?.(); } });
     this.popover = w;
     return w;
