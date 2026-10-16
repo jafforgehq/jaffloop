@@ -21,6 +21,8 @@ const migrations = (db: DatabaseSync) => (db.prepare('SELECT identifier FROM grd
 
 const ALL_MIGRATIONS = ['v1', 'v2-person-notes', 'v3-person-dates'];
 const hasSqlite3 = spawnSync('sqlite3', ['--version']).status === 0;
+// the sqlite3 CLI on some machines (GitHub's macOS runners) is built without FTS5
+const cliHasFts5 = hasSqlite3 && spawnSync('sqlite3', [':memory:', 'create virtual table t using fts5(a)']).status === 0;
 const swiftMcp = join(__dirname, '..', 'dist/Jaffloop.app/Contents/MacOS/jaffloop-mcp');
 
 describe('GRDB dates', () => {
@@ -221,7 +223,7 @@ describe.skipIf(!hasSqlite3)('rows we write, read through the sqlite3 CLI', () =
     expect(q('SELECT tag FROM item_tags')).toBe('rfc');
     expect(q('SELECT identifier FROM grdb_migrations ORDER BY identifier')).toBe('v1\nv2-person-notes\nv3-person-dates');
     expect(q('PRAGMA integrity_check')).toBe('ok');
-    expect(q("SELECT COUNT(*) FROM items WHERE rowid IN (SELECT rowid FROM items_fts WHERE items_fts MATCH '\"rev\"*')")).toBe('1');
+    if (cliHasFts5) expect(q("SELECT COUNT(*) FROM items WHERE rowid IN (SELECT rowid FROM items_fts WHERE items_fts MATCH '\"rev\"*')")).toBe('1');
   });
 });
 
