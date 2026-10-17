@@ -199,17 +199,17 @@ describe('settings', () => {
   it('pause 1 hour, status line, resume', async () => {
     await w.evaluate(() => window.jaffloop.openSettings('notifications'));
     const s = await l.waitView('settings');
-    await s.getByRole('button', { name: 'Pause 1 hour' }).click();
+    await s.getByRole('button', { name: 'Pause 1 hour', exact: true }).click();
     await s.getByTestId('pause-status').waitFor();
     expect(await s.getByTestId('pause-status').textContent()).toContain('Notifications are paused until');
     const until = (await api((a) => a.uiState())).pauseUntil!;
     expect(until - Date.now()).toBeGreaterThan(3_500_000);
     await shot(s, 'settings-notifications-paused');
-    await s.getByRole('button', { name: 'Pause until tomorrow' }).click();
+    await s.getByRole('button', { name: 'Pause until tomorrow', exact: true }).click();
     await sleep(300);
     const tomorrow = (await api((a) => a.uiState())).pauseUntil!;
     expect(new Date(tomorrow).getHours()).toBe(9);
-    await s.getByRole('button', { name: 'Resume' }).click();
+    await s.getByRole('button', { name: 'Resume', exact: true }).click();
     await s.getByTestId('pause-status').waitFor({ state: 'detached' });
     expect((await api((a) => a.uiState())).pauseUntil).toBeNull();
   });
@@ -218,17 +218,17 @@ describe('settings', () => {
     await w.evaluate(() => window.jaffloop.openSettings('general'));
     const s = await l.waitView('settings');
     await s.getByRole('tab', { name: 'General' }).click();
-    await s.getByLabel('Menu bar shows').selectOption('next');
+    await s.getByLabel('Menu bar shows', { exact: true }).selectOption('next');
     await s.getByRole('switch', { name: 'Show anniversaries and birthdays' }).click();
-    await s.getByLabel('Jira base URL').fill('https://acme.atlassian.net/browse');
-    await s.getByLabel('Jira base URL').blur();
+    await s.getByLabel('Jira base URL', { exact: true }).fill('https://acme.atlassian.net/browse');
+    await s.getByLabel('Jira base URL', { exact: true }).blur();
     await sleep(500);
     const ui = await api((a) => a.uiState());
     expect(ui.trayText).toBe('next');
     expect(ui.showDates).toBe(false);
     expect((await api((a) => a.snapshot())).settings.jiraBaseUrl).toBe('https://acme.atlassian.net/browse/');
     // templates: a reserved name is refused, a good one is saved
-    await s.getByRole('button', { name: 'Add template' }).click();
+    await s.getByRole('button', { name: 'Add template', exact: true }).click();
     await s.getByLabel('Template 2 name').fill('owe');
     await s.getByLabel('Template 2 lines').fill('todo x @{person}');
     await s.getByLabel('Template 2 lines').blur();

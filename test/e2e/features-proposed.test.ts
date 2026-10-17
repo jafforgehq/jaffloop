@@ -50,6 +50,8 @@ afterAll(async () => { await l.close(); cleanup(l); });
 
 describe('with the setting off', () => {
   it('Claude\'s items are normal items and nothing is proposed', async () => {
+    expect((await snap()).settings.reviewClaudeItems).toBe(true); // the default since 0.5.0
+    await w.evaluate(() => window.jaffloop.saveSettings({ reviewClaudeItems: false }));
     expect((await snap()).settings.reviewClaudeItems).toBe(false);
     const [r] = await mcp([add('Normal item from Claude', { person: 'sara', due: '2030-01-04' })]);
     expect(r!.proposed).toBeUndefined();
@@ -101,7 +103,7 @@ describe('with "Review what Claude adds first" on', () => {
     const two = w.locator('[data-testid=proposal]', { hasText: 'Proposal two' });
     expect(await two.textContent()).toContain('Amir');
     expect(await w.locator('[data-testid=proposal]', { hasText: 'Proposal one' }).textContent()).toContain('outlook');
-    expect(await w.getByRole('button', { name: 'Accept all' }).count()).toBe(1);
+    expect(await w.getByRole('button', { name: 'Accept all', exact: true }).count()).toBe(1);
     // above the normal inbox rows
     const order = await w.evaluate(() => { const a = document.querySelector('[data-testid=proposals]')!; const b = document.querySelector('.rows[aria-label=Inbox]'); return b ? Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) : true; });
     expect(order).toBe(true);
@@ -146,12 +148,12 @@ describe('with "Review what Claude adds first" on', () => {
   it('Accept all and Dismiss all work on every proposal, with Undo', async () => {
     await mcp([add('Bulk a', { external_id: 'e2e:b1' }), add('Bulk b', { external_id: 'e2e:b2' })]);
     await waitProposals(3);
-    await w.getByRole('button', { name: 'Dismiss all' }).click();
+    await w.getByRole('button', { name: 'Dismiss all', exact: true }).click();
     await w.waitForFunction(() => document.querySelectorAll('[data-testid=proposal]').length === 0);
     expect((await snap()).proposed).toHaveLength(0);
     await w.getByRole('button', { name: 'Undo' }).click();
     await waitProposals(3);
-    await w.getByRole('button', { name: 'Accept all' }).click();
+    await w.getByRole('button', { name: 'Accept all', exact: true }).click();
     await w.waitForFunction(() => document.querySelectorAll('[data-testid=proposal]').length === 0);
     const s = await snap();
     expect(s.proposed).toHaveLength(0);

@@ -19,7 +19,7 @@ function copyFixture(name: string): string {
 const schema = (db: DatabaseSync) => (db.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all());
 const migrations = (db: DatabaseSync) => (db.prepare('SELECT identifier FROM grdb_migrations ORDER BY identifier').all() as Array<{ identifier: string }>).map((r) => r.identifier);
 
-const ALL_MIGRATIONS = ['v1', 'v2-person-notes', 'v3-person-dates', 'v4-external-ids', 'v5-people-title-proposed'];
+const ALL_MIGRATIONS = ['v1', 'v2-person-notes', 'v3-person-dates', 'v4-external-ids', 'v5-people-title-proposed', 'v6-custom-prompts'];
 const hasSqlite3 = spawnSync('sqlite3', ['--version']).status === 0;
 // the sqlite3 CLI on some machines (GitHub's macOS runners) is built without FTS5
 const cliHasFts5 = hasSqlite3 && spawnSync('sqlite3', [':memory:', 'create virtual table t using fts5(a)']).status === 0;
@@ -44,7 +44,9 @@ describe('GRDB dates', () => {
 const V4_ALTERS = `ALTER TABLE "items" ADD COLUMN "external_id" TEXT; ALTER TABLE "items" ADD COLUMN "source_label" TEXT; ALTER TABLE "items" ADD COLUMN "source_url" TEXT;
   ALTER TABLE "items" ADD COLUMN "interaction_id" TEXT; CREATE UNIQUE INDEX "items_external_id" ON "items"("external_id") WHERE "external_id" IS NOT NULL`;
 
-/** The Swift v2 fixture plus the 0.2.0, 0.3.0 and 0.4.0 columns, as ALTER TABLE leaves them: what every database must look like now. */
+const V6_CREATE = `CREATE TABLE "custom_prompts" ("id" TEXT PRIMARY KEY NOT NULL, "title" TEXT NOT NULL, "description" TEXT NOT NULL DEFAULT '', "needs" TEXT NOT NULL DEFAULT '[]', "arguments" TEXT NOT NULL DEFAULT '[]', "text" TEXT NOT NULL, "approved" BOOLEAN NOT NULL DEFAULT 0, "source" TEXT NOT NULL DEFAULT 'app', "created_at" DATETIME NOT NULL, "updated_at" DATETIME NOT NULL)`;
+
+/** The Swift v2 fixture plus the 0.2.0 to 0.5.0 columns and table, as ALTER TABLE leaves them: what every database must look like now. */
 function currentSchema(): ReturnType<typeof schema> {
   const db = new DatabaseSync(':memory:');
   const fixture = new DatabaseSync(join(FIX, 'swift-v2.sqlite'), { readOnly: true });
@@ -53,6 +55,7 @@ function currentSchema(): ReturnType<typeof schema> {
   db.exec('ALTER TABLE "people" ADD COLUMN "start_date" TEXT; ALTER TABLE "people" ADD COLUMN "birthday" TEXT');
   db.exec(V4_ALTERS);
   db.exec(`ALTER TABLE "people" ADD COLUMN "title" TEXT NOT NULL DEFAULT ''; ALTER TABLE "items" ADD COLUMN "proposed" BOOLEAN NOT NULL DEFAULT 0`);
+  db.exec(V6_CREATE);
   const out = schema(db);
   db.close();
   return out;
@@ -98,7 +101,7 @@ describe('opening a database made by the Swift app (v2)', () => {
     expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
     db.close();
   });
-  it('only adds the v3 to v5 columns to the schema, and keeps all data', () => {
+  it('only adds the v3 to v6 columns to the schema, and keeps all data', () => {
     const fixture = new DatabaseSync(join(FIX, 'swift-v2.sqlite'), { readOnly: true });
     const before = fixture.prepare('SELECT * FROM people ORDER BY id').all() as Array<Record<string, unknown>>;
     const nItems = (fixture.prepare('SELECT COUNT(*) c FROM items').get() as { c: number }).c;
@@ -198,6 +201,26 @@ describe('migrating to v4 (0.3.0)', () => {
   });
 });
 
+describe('migrating to v6 (0.5.0)', () => {
+  it('a v5 database gains custom_prompts and keeps its items; the migration is recorded', () => {
+    const path = join(dir, 'v5-to-v6.sqlite');
+    const db = new DatabaseSync(path);
+    for (const m of MIGRATIONS.slice(0, 5)) db.exec(m.sql);
+    db.exec('CREATE TABLE grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)');
+    db.exec("INSERT INTO grdb_migrations VALUES ('v1'), ('v2-person-notes'), ('v3-person-dates'), ('v4-external-ids'), ('v5-people-title-proposed')");
+    db.exec(`INSERT INTO items(id, kind, title, created_at, updated_at, last_touched_at) VALUES ('I1', 'task', 'keep me', '2026-10-01 09:00:00.000', '2026-10-01 09:00:00.000', '2026-10-01 09:00:00.000')`);
+    db.close();
+    const migrated = openDatabase(path);
+    expect(migrations(migrated)).toEqual(ALL_MIGRATIONS);
+    const store = new Store(migrated);
+    expect(store.item('I1')).toMatchObject({ title: 'keep me' });
+    expect(store.customPrompts()).toEqual([]);
+    expect(schema(migrated)).toEqual(currentSchema());
+    expect(JSON.parse(store.exportJSON()).custom_prompts).toEqual([]);
+    migrated.close();
+  });
+});
+
 describe('a new database', () => {
   it('has the same schema as a migrated Swift database, with every migration recorded', () => {
     const db = openDatabase(join(dir, 'sub', 'dir', 'new.sqlite'));    // creates the directories
@@ -264,7 +287,7 @@ describe.skipIf(!hasSqlite3)('rows we write, read through the sqlite3 CLI', () =
     expect(q('SELECT event, detail, at FROM item_events ORDER BY id')).toBe('created|mcp|2026-10-14 10:00:00.123\nsnoozed|2026-10-20T09:00:00Z|2026-10-14 10:00:00.123');
     expect(q("SELECT key, value FROM settings WHERE key IN ('eodTime','hotkey') ORDER BY key")).toBe('eodTime|16:00\nhotkey|Alt+Space');
     expect(q('SELECT tag FROM item_tags')).toBe('rfc');
-    expect(q('SELECT identifier FROM grdb_migrations ORDER BY identifier')).toBe('v1\nv2-person-notes\nv3-person-dates\nv4-external-ids\nv5-people-title-proposed');
+    expect(q('SELECT identifier FROM grdb_migrations ORDER BY identifier')).toBe('v1\nv2-person-notes\nv3-person-dates\nv4-external-ids\nv5-people-title-proposed\nv6-custom-prompts');
     expect(q('PRAGMA integrity_check')).toBe('ok');
     if (cliHasFts5) expect(q("SELECT COUNT(*) FROM items WHERE rowid IN (SELECT rowid FROM items_fts WHERE items_fts MATCH '\"rev\"*')")).toBe('1');
   });

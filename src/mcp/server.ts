@@ -4,7 +4,7 @@
 import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { Interaction, InteractionKind, Item, ItemFilter, ItemKind, ItemStatus, Person, PersonSummary } from '../shared/types';
+import type { CustomPrompt, Interaction, InteractionKind, Item, ItemFilter, ItemKind, ItemStatus, Person, PersonSummary } from '../shared/types';
 import { ITEM_KINDS, RELATIONS } from '../shared/types';
 import { addDays } from '../core/calendar';
 import { openDatabase } from '../core/db';
@@ -13,7 +13,7 @@ import { parseCapture } from '../core/parser';
 import { isOverdue, isSlipping, isStaleWait } from '../core/rules';
 import { hm } from '../core/settings';
 import { Store, type InsertResult, type ItemOrigin } from '../core/store';
-import { PROMPTS, renderPrompt } from '../shared/prompts';
+import { PROMPTS, renderPrompt, type JaffloopPrompt } from '../shared/prompts';
 
 // Replaced by esbuild's `define` (scripts/build.mjs); undefined under vitest and plain tsc.
 declare const __JAFFLOOP_VERSION__: string | undefined;
@@ -21,10 +21,32 @@ export const mcpServerVersion: string = typeof __JAFFLOOP_VERSION__ === 'string'
 
 type J = Record<string, unknown>;
 
-const WRITE_TOOLS = new Set(['capture', 'add_item', 'add_items', 'complete_item', 'snooze_item', 'update_item', 'log_interaction', 'save_person']);
+const WRITE_TOOLS = new Set(['capture', 'add_item', 'add_items', 'complete_item', 'snooze_item', 'update_item', 'log_interaction', 'save_person', 'save_prompt']);
 const INTERACTION_KINDS: InteractionKind[] = ['1on1', 'meeting', 'chat', 'other'];
 const STATUSES: ItemStatus[] = ['open', 'done', 'dropped'];
 const MAX_BULK_ITEMS = 100;
+
+/** A stored custom prompt as the built-in shape, so list, get and renderPrompt treat both alike. */
+const toPrompt = (c: CustomPrompt): JaffloopPrompt => ({ id: c.id, title: c.title, description: c.description, needs: c.needs, arguments: c.arguments, text: c.text });
+const promptListItem = (p: JaffloopPrompt): J => ({
+  name: p.id, title: p.title, description: p.description,
+  arguments: p.arguments.map((x) => ({ name: x.name, description: x.description, required: x.required })),
+});
+
+/** Returns a function that is true when the set of approved custom prompts changed since its last call (the first call only records it). */
+export function promptSetWatcher(store: Store): () => boolean {
+  const key = (): string => JSON.stringify(store.customPrompts().filter((c) => c.approved).map((c) => [c.id, c.updatedAt]));
+  let last = key(), version = store.dataVersion();
+  return () => {
+    const v = store.dataVersion();
+    if (v === version) return false;
+    version = v;
+    const now = key();
+    if (now === last) return false;
+    last = now;
+    return true;
+  };
+}
 
 class MCPError extends Error {
   // The Swift server printed these with "\(error)" in resources/read errors (Swift's debug text also escapes '); keep that text.
@@ -91,6 +113,7 @@ export interface MCPServerOptions {
 
 export class MCPServer {
   now: () => number;
+  private initialized = false;
 
   constructor(readonly store: Store, opts: MCPServerOptions = {}) {
     this.now = opts.now ?? Date.now;
@@ -102,6 +125,12 @@ export class MCPServer {
   runStdio(): Promise<void> {
     process.stdout.on('error', () => process.exit(0)); // client went away
     const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+    // tell the client when the approved custom prompts change (approved in the app, which is another process)
+    const changed = promptSetWatcher(this.store);
+    const timer = setInterval(() => {
+      if (this.initialized && changed()) process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/prompts/list_changed' }) + '\n');
+    }, 1000);
+    timer.unref();
     rl.on('line', (line) => {
       if (line.trim() === '') return;
       let msg: unknown;
@@ -115,7 +144,7 @@ export class MCPServer {
       }
       if (resp) process.stdout.write(JSON.stringify(resp) + '\n');
     });
-    return new Promise((resolve) => rl.on('close', resolve));
+    return new Promise((resolve) => rl.on('close', () => { clearInterval(timer); resolve(); }));
   }
 
   handle(msg: object): J | null {
@@ -128,23 +157,19 @@ export class MCPServer {
     const err = (code: number, message: string): J => ({ jsonrpc: '2.0', id, error: { code, message } });
     switch (method) {
       case 'initialize':
+        this.initialized = true;
         return ok({
           protocolVersion: asStr(params.protocolVersion) ?? '2025-03-26',
-          capabilities: { tools: {}, resources: {}, prompts: {} },
+          capabilities: { tools: {}, resources: {}, prompts: { listChanged: true } },
           serverInfo: { name: 'jaffloop', version: mcpServerVersion },
         });
       case 'ping': return ok({});
       case 'tools/list': return ok({ tools: TOOL_DEFS });
       case 'tools/call': return ok(this.callTool(asStr(params.name) ?? '', isObj(params.arguments) ? params.arguments : {}));
       case 'prompts/list':
-        return ok({
-          prompts: PROMPTS.map((p) => ({
-            name: p.id, title: p.title, description: p.description,
-            arguments: p.arguments.map((x) => ({ name: x.name, description: x.description, required: x.required })),
-          })),
-        });
+        return ok({ prompts: this.servedPrompts().map(promptListItem) });
       case 'prompts/get': {
-        const p = PROMPTS.find((x) => x.id === asStr(params.name));
+        const p = this.servedPrompts().find((x) => x.id === asStr(params.name));
         if (!p) return err(-32602, `Unknown prompt: ${asStr(params.name) ?? ''}`);
         const given: Record<string, string> = {};
         if (isObj(params.arguments)) {
@@ -174,6 +199,11 @@ export class MCPServer {
       }
       default: return err(-32601, `method not found: ${method}`);
     }
+  }
+
+  /** Built-in prompts plus the custom ones the user approved; unapproved ones are never served. */
+  private servedPrompts(): JaffloopPrompt[] {
+    return [...PROMPTS, ...this.store.customPrompts().filter((c) => c.approved).map(toPrompt)];
   }
 
   // ---- tools ----
@@ -435,6 +465,11 @@ export class MCPServer {
         return [out, `log_interaction: ${p.handle}`];
       }
       case 'save_person': return this.savePerson(a, t);
+      case 'list_prompts': {
+        const custom = store.customPrompts();
+        return [{ builtin: PROMPTS.map((p) => ({ id: p.id, title: p.title })), custom: custom.map((c) => ({ id: c.id, title: c.title, approved: c.approved })) }, `list_prompts: ${PROMPTS.length} built-in, ${custom.length} custom`];
+      }
+      case 'save_prompt': return this.savePrompt(a, t);
       case 'search': {
         const q = asStr(a.query);
         if (q === undefined) throw new MCPError('query is required');
@@ -467,6 +502,29 @@ export class MCPServer {
       }
       default: throw new MCPError(`unknown tool: ${name}`);
     }
+  }
+
+  /** Saves a prompt for the user to approve in the app; Claude can neither approve nor delete. Validation problems are tool errors. */
+  private savePrompt(a: J, t: number): [unknown, string] {
+    const id = asStr(a.id)?.trim();
+    if (!id) throw new MCPError('id is required');
+    const strOr = (k: string, d: string): string => {
+      if (a[k] === undefined) return d;
+      const v = asStr(a[k]);
+      if (v === undefined) throw new MCPError(`${k} must be a string`);
+      return v;
+    };
+    const needs = a.needs === undefined ? [] : asStrings(a.needs);
+    if (!needs) throw new MCPError('needs must be an array of strings');
+    if (a.arguments !== undefined && (!Array.isArray(a.arguments) || !a.arguments.every(isObj))) throw new MCPError('arguments must be an array of objects');
+    const args = ((a.arguments ?? []) as J[]).map((x) => {
+      const dflt = x.default === undefined || x.default === null ? undefined : asStr(x.default);
+      if (x.default !== undefined && x.default !== null && dflt === undefined) throw new MCPError(`argument '${asStr(x.name) ?? ''}': default must be a string`);
+      return { name: asStr(x.name) ?? '', description: asStr(x.description) ?? '', required: asBool(x.required) ?? false, ...(dflt !== undefined && { default: dflt }) };
+    });
+    const r = this.store.saveCustomPrompt({ id, title: strOr('title', ''), description: strOr('description', ''), text: strOr('text', ''), needs, arguments: args }, 'mcp', t);
+    if (r.error !== undefined) throw new MCPError(r.error);
+    return [{ id, status: 'needs_approval', message: 'Open Jaffloop, Settings, Claude (MCP) and approve it.' }, `save_prompt: ${id}`];
   }
 
   /** Upsert by handle; only the fields that are present change. Validates everything before writing. Notes and hidden_from_claude are not writable here. */
@@ -549,12 +607,13 @@ export class MCPServer {
     const open = store.items({ personId: p.id, includeSnoozed: true }, t);
     const said = store.items({ personId: p.id, kinds: ['said'], status: null, limit: 20 }, t);
     const inter = store.interactions(p.id);
+    const share = store.settings().shareOneOnOneNotes; // off: 1:1 notes stay in the app
     const of = (...kinds: ItemKind[]): J[] => open.filter((i) => kinds.includes(i.kind)).map((i) => this.itemJSON(i));
     return {
       ...this.personJSON(summary),
       i_owe_them: of('owe'), they_owe_me: of('wait'), bring_up: of('bring'), other_open: of('task', 'note'),
       said_log: said.map((i) => this.itemJSON(i)),
-      recent_interactions: inter.map((x: Interaction) => ({ at: isoString(x.occurredAt), kind: x.kind, notes: x.notes })),
+      recent_interactions: inter.map((x: Interaction) => ({ at: isoString(x.occurredAt), kind: x.kind, ...(share && { notes: x.notes }) })),
     };
   }
 
@@ -640,6 +699,8 @@ const TOOL_DEFS: J[] = [
   tool('search', 'Full-text search over titles, bodies and quotes.', { query: str, filters: { type: 'object', properties: { kind: str, person: str, before: str, status: str } } }, ['query']),
   tool('prep_brief', 'Structured data to prepare a conversation: open items both ways, talking points, recent said entries, cadence.', { person: s('Person handle') }, ['person']),
   tool('week_summary', 'Created, completed, slipped and stale items for a range (defaults to the last 7 days).', { from: s('ISO date'), to: s('ISO date') }),
+  tool('list_prompts', 'List the prompt ids and titles that exist: built-in ones and custom ones (with whether the user approved them). Call it before save_prompt so you do not reuse an id.', {}),
+  tool('save_prompt', 'Save a reusable prompt for the user. It is NOT usable until the user approves it in Jaffloop (Settings, Claude (MCP)); you cannot approve or delete prompts. Saving an existing custom id replaces it and needs approval again. Use {{name}} placeholders in text for anything that changes between runs and declare each as an argument.', { id: s('Lower case letters, digits and dashes (2-40 characters); not the id of a built-in prompt'), title: s('1-80 characters'), description: s('One sentence, at most 300 characters'), text: s('The prompt, 20-8000 characters; {{name}} placeholders must be declared in arguments'), needs: { type: 'array', maxItems: 8, items: { type: 'string', maxLength: 40 }, description: "Connectors it needs, e.g. 'Outlook mail'" }, arguments: { type: 'array', maxItems: 8, items: { type: 'object', properties: { name: s('lower case letters, digits, _; starts with a letter'), description: str, required: { type: 'boolean' }, default: str }, required: ['name', 'description'] } } }, ['id', 'title', 'description', 'text']),
 ];
 
 // ---- entry point: jaffloop-mcp [--db <path>] [--version] ----

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { Fmt } from '../core';
 import { Icon } from '../components/icons';
+import { tip } from '../help';
 import { settings, showShortcuts } from '../model';
 
 type Group = [string, Array<[string, string]>];
@@ -39,7 +40,7 @@ function Sheet() {
         onKeyDown={(e) => { if (e.key === 'Escape' || e.key === '?') { e.preventDefault(); e.stopPropagation(); close(); } }}>
         <div class="row-flex" style={{ marginBottom: 16 }}>
           <h2 class="title sm grow">Keyboard shortcuts</h2>
-          <button type="button" class="btn quiet icon" aria-label="Close" onClick={close}><Icon name="xmark" size={12} /></button>
+          <button type="button" class="btn quiet icon" aria-label="Close" title={tip('shortcuts.close')} onClick={close}><Icon name="xmark" size={12} /></button>
         </div>
         <div class="sc-cols">
           <div class="sc-col">{block(g[0]!)}{block(g[1]!)}</div>

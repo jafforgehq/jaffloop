@@ -22,7 +22,7 @@ export function ReleasesPage() {
   );
 
   return (
-    <Page title="What's new" subtitle={`Installed: version ${version}`} header={header}>
+    <Page title="What's new" help="page.releases" subtitle={`Installed: version ${version}`} header={header}>
       {tab === 'new'
         ? releaseNotes.map((n) => <ReleaseCard key={n.version} note={n} installed={n.version === version} />)
         : (

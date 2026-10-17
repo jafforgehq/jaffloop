@@ -2,7 +2,7 @@
 // the MCP server serves it as MCP prompts (prompts/list, prompts/get: they show up as slash commands in Claude),
 // and Settings → Claude (MCP) shows it with Copy buttons. Text uses {{name}} placeholders for arguments.
 // Tool names: capture, add_item, add_items, list_items, get_person, list_people, complete_item, snooze_item, update_item,
-// log_interaction, save_person, search, prep_brief, week_summary. Duplicates are skipped by the server when an external_id repeats.
+// log_interaction, save_person, save_prompt, list_prompts, search, prep_brief, week_summary. Duplicates are skipped by the server when an external_id repeats.
 
 export interface PromptArgument {
   name: string;
@@ -21,6 +21,8 @@ export interface JaffloopPrompt {
   needs: string[];
   arguments: PromptArgument[];
   text: string;
+  /** safe to run unattended (it only reads other systems and writes to Jaffloop): offered in Settings → Claude → Run on a schedule */
+  schedulable?: boolean;
 }
 
 const DEDUP =
@@ -30,6 +32,7 @@ const DEDUP =
 export const PROMPTS: JaffloopPrompt[] = [
   {
     id: 'monday-sweep',
+    schedulable: true,
     title: 'Monday sweep: what I promised',
     description: 'Reads your sent mail and calendar since a date and adds the commitments you made as promises.',
     needs: ['Outlook mail', 'Outlook calendar'],
@@ -42,6 +45,7 @@ export const PROMPTS: JaffloopPrompt[] = [
   },
   {
     id: 'waiting-sweep',
+    schedulable: true,
     title: 'Waiting on others',
     description: 'Finds requests you sent that got no reply and tracks them as things you are waiting on.',
     needs: ['Outlook mail'],
@@ -53,6 +57,7 @@ export const PROMPTS: JaffloopPrompt[] = [
   },
   {
     id: 'jira-mentions',
+    schedulable: true,
     title: 'Jira mentions and reviews',
     description: 'Turns Jira mentions, review requests and assigned tickets into promises with the ticket key in the title.',
     needs: ['Jira'],
@@ -89,6 +94,7 @@ export const PROMPTS: JaffloopPrompt[] = [
   },
   {
     id: 'friday-status',
+    schedulable: true,
     title: 'Friday status for my manager',
     description: 'Writes a short factual status update from your week.',
     needs: [],
@@ -99,6 +105,7 @@ export const PROMPTS: JaffloopPrompt[] = [
   },
   {
     id: 'chase-stale-waits',
+    schedulable: true,
     title: 'Chase stale waits',
     description: 'Drafts polite nudges for everything you have been waiting on too long. Nothing is sent.',
     needs: [],
@@ -151,6 +158,47 @@ export const PROMPTS: JaffloopPrompt[] = [
       'First call Jaffloop list_people so you do not touch people who are already there. For each new person call save_person with their handle (first name, or first.last when two people share a first name), full name, position (title), ' +
       'relation (report, peer, manager or stakeholder), cadence_days from how often the 1:1 recurs (weekly 7, every two weeks 14, monthly 30) and their work email in match_emails. ' +
       'Do not guess a birthday or start date. Show me the list you saved and mark anything you were unsure about.',
+  },
+  {
+    id: 'teams-sweep',
+    title: 'Teams sweep: chat promises and asks',
+    description: 'Reads your recent Teams chats and channel mentions and adds what you promised and what people asked of you.',
+    needs: ['Teams'],
+    schedulable: true,
+    arguments: [{ name: 'since', description: 'Start of the period', required: false, default: 'yesterday' }],
+    text:
+      'Read my Teams chats and channel messages that mention me from {{since}} until now. Find two things: commitments I made ("I will send it tomorrow", "let me look into that") and requests people made of me that I have not answered. ' +
+      'First call Jaffloop list_people and list_items so you know the people (use their handles) and what is already tracked. ' +
+      'Add my commitments as kind "owe" and the unanswered requests as kind "owe" with a short title that says what they want. Add a "wait" when someone else promised me something. Use a due date only when one was said. ' +
+      'Skip small talk, reactions and anything already tracked. ' + DEDUP + ' Use teams:<message id> as the external_id. Finish with the count added and anything you were unsure about.',
+  },
+  {
+    id: 'confluence-mentions',
+    title: 'Confluence mentions and reviews',
+    description: 'Finds Confluence comments that mention you and pages waiting for your review, and adds them as promises.',
+    needs: ['Confluence'],
+    schedulable: true,
+    arguments: [{ name: 'since', description: 'Start of the period', required: false, default: 'last Friday' }],
+    text:
+      'Search Confluence for comments that mention me and pages where I was asked to review or approve something since {{since}}. ' +
+      'First call Jaffloop list_people and list_items so you know the people and what is already tracked. ' +
+      'For each open request add an item of kind "owe" with the requester\'s handle and a title that says what is asked and on which page (for example "Review the on-call RFC page"). Add a "wait" for questions I asked that are still unanswered. ' +
+      'Skip comments that are resolved or already tracked. ' + DEDUP + ' Use confluence:<page id>:<comment id> as the external_id (confluence:<page id> when there is no comment) and the page link as source_url.',
+  },
+  {
+    id: 'make-prompt',
+    title: 'Make a new prompt',
+    description: 'Describe what you want and Claude writes a Jaffloop prompt for it and saves it, waiting for your approval in the app.',
+    needs: [],
+    arguments: [{ name: 'request', description: 'What the prompt should do, in your own words', required: true }],
+    text:
+      'I want a new reusable Jaffloop prompt. What it should do: {{request}}\n\n' +
+      'First call Jaffloop list_prompts so you do not reuse an id, and list_people if the prompt needs people. Then write the prompt so that it works for a Claude that has this Jaffloop server and the connectors it needs: ' +
+      'say exactly what to read and from where, which Jaffloop tools to call (capture, add_item, add_items, list_items, get_person, list_people, log_interaction, save_person, search, prep_brief, week_summary), what each item should contain, and what to skip. ' +
+      'If it adds items from another system, tell it to give every item an external_id, a source_label and a source_url, and to use one add_items call, so repeats never create copies. ' +
+      'Use {{name}} placeholders for anything that changes between runs (such as a date range or a person) and declare each one as an argument with a default where that makes sense. ' +
+      'Then call save_prompt with id (lower case letters, digits and dashes), title, description (one sentence), needs (the connectors, for example "Outlook mail"), arguments and text. ' +
+      'Finally tell me the prompt was saved, show me its text, and remind me to approve it in Jaffloop under Settings, Claude (MCP), because prompts you save wait for my approval.',
   },
 ];
 

@@ -2,7 +2,7 @@
 // Views read signals and call these functions; nothing in a view talks to window.jaffloop for data except through here.
 import { batch, computed, signal } from '@preact/signals';
 import type { AppInfo, Nav, UiState, UpdateState } from '../shared/api';
-import type { Item, Person, PersonSummary, Snapshot } from '../shared/types';
+import type { CustomPrompt, Item, Person, PersonSummary, Schedule, Snapshot, SyncHealth } from '../shared/types';
 import { Fmt, NavHistory, PinOrder, nextOneOnOneAt, parseCapture, sortPeople } from './core';
 import { captureLine, loggedToast } from './oneonone-logic';
 import { proposedToast } from './onboarding-logic';
@@ -16,7 +16,7 @@ export const view = api.view;
 // ---------------------------------------------------------------- state
 
 const emptySnapshot: Snapshot = {
-  settings: { eodTime: '17:30', workStart: '09:00', workEnd: '18:00', morningBrief: '08:30', staleDaysAfterDue: 3, staleDaysNoDue: 5, mcpReadOnly: false, compact: false, sound: false, haptics: true, hotkey: 'Alt+Space', jiraBaseUrl: '', captureTemplates: [], reviewClaudeItems: false },
+  settings: { eodTime: '17:30', workStart: '09:00', workEnd: '18:00', morningBrief: '08:30', staleDaysAfterDue: 3, staleDaysNoDue: 5, mcpReadOnly: false, compact: false, sound: false, haptics: true, hotkey: 'Alt+Space', jiraBaseUrl: '', captureTemplates: [], reviewClaudeItems: true, shareOneOnOneNotes: true },
   today: { slipping: [], overdue: [], today: [], waitingStale: [], inbox: [], checkIn: [] },
   openItems: [], summaries: [], tags: [], auditLog: [], snoozedCount: 0, proposed: [], now: Date.now(),
 };
@@ -481,3 +481,14 @@ export async function dismissProposed(ids: string[], label?: string) {
 }
 export const acceptOne = (i: Item) => acceptProposed([i.id], short(i.title));
 export const dismissOne = (i: Item) => dismissProposed([i.id], short(i.title));
+
+// ---- added by worker "claude" (0.5.0): Settings → Claude (MCP)
+export const customPrompts = signal<CustomPrompt[]>([]);
+export const syncHealth = signal<SyncHealth | null>(null);
+export const schedules = signal<Schedule[]>([]);
+
+/** Reloads what the Claude tab shows; called when it opens and whenever the data changes. */
+export async function reloadClaude(): Promise<void> {
+  const [c, h, s] = await Promise.all([api.customPrompts(), api.syncHealth(), api.schedules()]);
+  batch(() => { customPrompts.value = c; syncHealth.value = h; schedules.value = s; });
+}

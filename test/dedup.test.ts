@@ -12,6 +12,7 @@ let rpcId = 0;
 
 beforeEach(() => {
   store = new Store(openMemoryDatabase());
+  store.saveSettings({ ...store.settings(), reviewClaudeItems: false }); // the default is on since 0.5.0; these tests are about plain adds
   server = new MCPServer(store, { now: () => NOW });
 });
 

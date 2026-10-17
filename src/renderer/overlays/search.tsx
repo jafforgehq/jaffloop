@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Item } from '../../shared/types';
 import { Fmt } from '../core';
 import { Icon } from '../components/icons';
+import { Help } from '../components/info';
 import { Kbd, LoopRing } from '../components/ui';
+import { tip } from '../help';
 import { addFilter, api, go, person, reveal, showSearch, showShortcuts, summaries } from '../model';
 import { firstName, highlightParts } from '../people-logic';
 
@@ -82,12 +84,13 @@ function Palette() {
           <input ref={input} class="palette-input" value={query} spellcheck={false} aria-label="Search"
             placeholder="Search items, people, actions…  @person  kind:owe  before:2026-11-01"
             onInput={(e) => { setQuery((e.target as HTMLInputElement).value); setSel(0); }} />
+          <Help id="search.input" />
           <Kbd>esc</Kbd>
         </div>
         <div class="hairline" />
         <div style={{ padding: 6 }} role="listbox">
           {shown.map((r, idx) => (
-            <div key={r.id} role="option" aria-selected={idx === at} class={`palette-row ${idx === at ? 'on' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={r.run}>
+            <div key={r.id} role="option" aria-selected={idx === at} title={r.id === 'save' ? tip('search.save') : undefined} class={`palette-row ${idx === at ? 'on' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={r.run}>
               <span class="dim" style={{ width: 18, display: 'inline-flex', justifyContent: 'center' }}>{r.icon === 'item' ? <LoopRing size={11} line={1.2} /> : <Icon name={r.icon} size={12} />}</span>
               <span class="grow palette-title">{r.terms?.length ? highlightParts(r.title, r.terms).map((p, i) => p.hit ? <mark key={i}>{p.text}</mark> : p.text) : r.title}</span>
               <span class="mono dim">{r.detail}</span>

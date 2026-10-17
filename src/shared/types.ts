@@ -118,6 +118,8 @@ export interface Settings {
   captureTemplates: CaptureTemplate[];
   /** items Claude adds over MCP wait in the Inbox as proposals until you accept them (default off) */
   reviewClaudeItems: boolean;
+  /** Claude (MCP) may read the notes of past 1:1s through get_person and prep_brief (default true); when off they are left out */
+  shareOneOnOneNotes: boolean;
 }
 
 /** `prep @sara` expands to the template's lines with {person} replaced by the handle and {rest} by the text after the person. */
@@ -268,4 +270,62 @@ export interface LinkSegment {
 export interface InteractionWithItems {
   interaction: Interaction;
   items: Item[];
+}
+
+// ---------------------------------------------------------------- 0.5.0
+
+export interface PromptArg {
+  name: string;
+  description: string;
+  required: boolean;
+  default?: string;
+}
+
+/** A prompt the user (or Claude, over MCP) wrote. Claude's start unapproved and are not served as MCP prompts until approved in the app. */
+export interface CustomPrompt {
+  /** slug: lower case letters, digits and '-', not the id of a built-in prompt; becomes /mcp__jaffloop__<id> */
+  id: string;
+  title: string;
+  description: string;
+  /** what Claude needs access to besides Jaffloop, e.g. ['Teams', 'Outlook mail'] */
+  needs: string[];
+  arguments: PromptArg[];
+  /** uses {{name}} placeholders for the arguments */
+  text: string;
+  approved: boolean;
+  source: 'app' | 'mcp';
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** What the app can edit; source and timestamps are set by the store. */
+export type CustomPromptInput = Pick<CustomPrompt, 'id' | 'title' | 'description' | 'needs' | 'arguments' | 'text'>;
+
+/** Per source_label: how much Claude has imported and when last. */
+export interface SyncHealthRow {
+  /** the source_label ('outlook', 'jira', ...) */
+  source: string;
+  total: number;
+  last7Days: number;
+  lastAt: number | null;
+}
+export interface SyncHealth {
+  sources: SyncHealthRow[];
+  /** time of the last write by the MCP server (audit log), null when never */
+  lastClaudeWriteAt: number | null;
+}
+
+/** A sweep that runs by itself through a launchd job on this Mac (the job file is the source of truth). */
+export interface Schedule {
+  /** built-in or approved custom prompt id */
+  promptId: string;
+  /** argument values, only the ones set */
+  args: Record<string, string>;
+  hour: number;
+  minute: number;
+  /** 0 = Sunday ... 6 = Saturday; empty = every day */
+  weekdays: number[];
+  /** extra --allowedTools patterns for the connectors, e.g. 'mcp__outlook__*' */
+  extraAllowedTools: string;
+  logPath: string;
 }

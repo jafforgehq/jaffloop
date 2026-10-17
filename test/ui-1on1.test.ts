@@ -46,8 +46,8 @@ describe('toast and cancel', () => {
 });
 
 describe('prompt cards', () => {
-  it('has eleven prompts and shows argument hints', () => {
-    expect(PROMPTS).toHaveLength(11);
+  it('has fourteen prompts and shows argument hints', () => {
+    expect(PROMPTS).toHaveLength(14);
     const sweep = PROMPTS.find((p) => p.id === 'monday-sweep')!;
     expect(argumentHint(sweep.arguments[0]!)).toBe('since: last Friday (optional)');
     const notes = PROMPTS.find((p) => p.id === 'meeting-notes')!;

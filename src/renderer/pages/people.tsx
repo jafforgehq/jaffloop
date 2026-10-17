@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { HeatRow, PersonSummary } from '../../shared/types';
 import { AllClosed } from '../components/all-closed';
 import { Icon } from '../components/icons';
+import { Help } from '../components/info';
 import { Page } from '../components/page';
 import { PersonForm, createFromDraft } from '../components/person-form';
 import { CadenceRing, Chip, Dot, GhostButton, PrimaryButton, Segmented } from '../components/ui';
 import { Fmt } from '../core';
+import { tip } from '../help';
 import { useFetched } from '../hooks/use-fetched';
 import { addPerson, api, go, openOnboarding, orderedPeople, person, summaries, ui } from '../model';
 import { type PersonDraft, emptyDraft, titleLine } from '../onboarding-logic';
@@ -22,7 +24,7 @@ function RhythmPanel() {
   const weekText = (ms: number) => `Week of ${Fmt.short(ms, 'd MMM')}`;
   return (
     <section class="rhythm card" aria-label="Rhythm" data-testid="rhythm">
-      <div class="rhythm-head"><span class="caps">Rhythm</span><span class="dim" style={{ fontSize: 11.5 }}>1:1s per week, last {HEAT_WEEKS} weeks</span></div>
+      <div class="rhythm-head"><span class="caps">Rhythm</span><Help id="people.rhythm" /><span class="dim" style={{ fontSize: 11.5 }}>1:1s per week, last {HEAT_WEEKS} weeks</span></div>
       {rows.map((r: HeatRow) => {
         const p = person(r.personId);
         if (!p) return null;
@@ -47,7 +49,7 @@ function RhythmPanel() {
 /** Open owes (accent) and waits (blue) as one thin bar, scaled by the busiest person. */
 function LoadBar({ share, owe, wait }: { share?: { owe: number; wait: number }; owe: number; wait: number }) {
   return (
-    <span class="loadbar" role="img" aria-label={`${owe} owed, ${wait} waiting`}>
+    <span class="loadbar" role="img" aria-label={`${owe} owed, ${wait} waiting`} title={tip('people.load')}>
       <span class="loadbar-owe" style={{ width: `${share?.owe ?? 0}%` }} />
       <span class="loadbar-wait" style={{ width: `${share?.wait ?? 0}%` }} />
     </span>
@@ -112,12 +114,15 @@ export function PeoplePage() {
   };
 
   return (
-    <Page title="People" subtitle={`${summaries.value.length} tracked`}>
+    <Page title="People" help="page.people" subtitle={`${summaries.value.length} tracked`}>
       <div class="row-flex gap10" style={{ marginTop: 16 }}>
         <input class="input" style={{ width: 220 }} value={name} placeholder="Add a person…" aria-label="Add a person"
           onInput={(e) => setName((e.target as HTMLInputElement).value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.isComposing) void add(); }} />
+        <Help id="people.add" />
         <GhostButton onClick={() => void add()}>Add</GhostButton>
+        <Help id="people.addBtn" />
         <GhostButton onClick={() => setDialog(true)}>Add person…</GhostButton>
+        <Help id="people.addDialog" />
         <span class="grow" />
         <select class="input" style={{ width: 160 }} aria-label="Sort people" value={sort}
           onChange={(e) => void api.setUiState({ peopleSort: (e.target as HTMLSelectElement).value as typeof sort })}>
@@ -125,10 +130,12 @@ export function PeoplePage() {
           <option value="urgency">Most overdue</option>
           <option value="last">Longest since 1:1</option>
         </select>
+        <Help id="people.sort" />
         <Segmented label="Layout" value={layout} onChange={(v) => void api.setUiState({ peopleLayout: v })} options={[
           { value: 'list', aria: 'List', label: <Icon name="list" size={14} /> },
           { value: 'grid', aria: 'Grid', label: <Icon name="grid" size={14} /> },
         ]} />
+        <Help id="people.layout" />
       </div>
       <RhythmPanel />
       {summaries.value.length === 0 && (
@@ -170,7 +177,7 @@ function Card({ s, pinned, share }: { s: PersonSummary; pinned: boolean; share?:
           <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.person.name}</span>
           <span class="mono dim ellipsis" style={{ display: 'block' }}>{titleLine(s.person)}</span>
         </span>
-        {pinned && <span class="dim"><Icon name="pin" size={11} /></span>}
+        {pinned && <span class="dim" title={tip('people.pinned')}><Icon name="pin" size={11} /></span>}
       </span>
       <span class={s.cadenceOverdue ? 'clay' : 'dim'} style={{ fontSize: 12 }}>{lastOneOnOne(s.daysSinceLast, true)}</span>
       <LoadBar share={share} owe={s.openOwe} wait={s.openWait} />

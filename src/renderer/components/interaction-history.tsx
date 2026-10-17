@@ -6,6 +6,7 @@ import { useFetched } from '../hooks/use-fetched';
 import { api, drawerItemId, isCollapsed, selectedItemId, toggleCollapsed } from '../model';
 import { agoLabel, statusLabel } from '../oneonone-logic';
 import { Icon } from './icons';
+import { Help } from './info';
 import { Dot, LoopRing } from './ui';
 
 const openDrawer = (id: string) => { selectedItemId.value = id; drawerItemId.value = id; };
@@ -54,12 +55,15 @@ export function InteractionHistory({ person }: { person: Person }) {
   const open = !isCollapsed(key);
   return (
     <div class="section hist" data-testid="history">
-      <button type="button" class="section-head" aria-expanded={open} aria-controls="history-list" onClick={() => toggleCollapsed(key)}>
-        <span class={`chev ${open ? 'open' : ''}`}><Icon name="chevron" size={10} /></span>
-        <span class="caps">1:1 history</span>
-        {entries && entries.length > 0 && <span class="dim tnum" style={{ fontSize: 11.5 }}>{entries.length}</span>}
-        <span class="rule" />
-      </button>
+      <div class="sh-wrap">
+        <button type="button" class="section-head" aria-expanded={open} aria-controls="history-list" onClick={() => toggleCollapsed(key)}>
+          <span class={`chev ${open ? 'open' : ''}`}><Icon name="chevron" size={10} /></span>
+          <span class="caps">1:1 history</span>
+          {entries && entries.length > 0 && <span class="dim tnum" style={{ fontSize: 11.5 }}>{entries.length}</span>}
+          <span class="rule" />
+        </button>
+        <Help id="person.history" />
+      </div>
       {open && entries && (
         <div id="history-list" class="hist-list">
           {entries.length === 0 && <div class="dim" style={{ fontSize: 12.5, padding: '2px 8px' }}>No 1:1s logged yet. Use Start 1:1 to take notes and capture action items.</div>}

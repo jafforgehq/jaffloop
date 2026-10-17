@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Page } from 'playwright-core';
+import { PROMPTS } from '../../src/shared/prompts';
 import { cleanup, launchApp, type Launched } from './helpers';
 
 const OUT = process.env.JAFFLOOP_UI_SHOTS ?? fs.mkdtempSync(path.join(os.tmpdir(), 'jaffloop-1on1-'));
@@ -44,7 +45,7 @@ describe('1:1 mode and history', () => {
   it('takes notes, captures two items, ends and logs the 1:1', async () => {
     before = (await history(sara.id)).length;
     await w.getByText('Start 1:1', { exact: true }).first().click();
-    await w.getByLabel('Meeting notes').fill(NOTES);
+    await w.getByLabel('Meeting notes', { exact: true }).fill(NOTES);
     const capture = w.getByLabel('Capture', { exact: true });
     await capture.fill('owe send the promotion doc fri');
     await capture.press('Enter');
@@ -52,8 +53,8 @@ describe('1:1 mode and history', () => {
     await capture.fill('wait Sara draft of the stretch project');
     await capture.press('Enter');
     await w.waitForFunction(() => document.querySelectorAll('[data-testid=captured] .mini-item').length === 2);
-    await w.getByLabel('What you said').fill('I will sponsor the stretch project');
-    await w.getByLabel('What you said').press('Enter');
+    await w.getByLabel('What you said', { exact: true }).fill('I will sponsor the stretch project');
+    await w.getByLabel('What you said', { exact: true }).press('Enter');
     await w.waitForFunction(() => document.querySelectorAll('[data-testid=captured] .mini-item').length === 3);
     const kinds = await w.locator('[data-testid=captured] .mini-kind').allTextContents();
     expect(kinds).toEqual(['owe', 'wait', 'said']);
@@ -63,7 +64,7 @@ describe('1:1 mode and history', () => {
     await shot(w, '1on1-mode-light');
     await scheme('dark');
 
-    await w.getByRole('button', { name: 'End 1:1 and log it' }).click();
+    await w.getByRole('button', { name: 'End 1:1 and log it', exact: true }).click();
     await w.getByText('1:1 logged with 3 action items').waitFor();
     await w.locator('[data-testid=history]').waitFor();
     const h = await history(sara.id);
@@ -107,12 +108,12 @@ describe('1:1 mode and history', () => {
   });
 
   it('collapses the section and remembers it', async () => {
-    await w.getByRole('button', { name: /1:1 history/ }).click();
+    await w.getByRole('button', { name: /^1:1 history/ }).click();
     await sleep(300);
     expect(await w.locator('[data-testid=history-entry]').count()).toBe(0);
     const key = `person.${sara.id}.history`;
     expect((await w.evaluate(() => window.jaffloop.uiState())).collapsed).toContain(key);
-    await w.getByRole('button', { name: /1:1 history/ }).click();
+    await w.getByRole('button', { name: /^1:1 history/ }).click();
     await sleep(300);
     expect(await w.locator('[data-testid=history-entry]').count()).toBeGreaterThan(0);
   });
@@ -124,11 +125,11 @@ describe('1:1 mode and history', () => {
     await w.getByText('Cancel', { exact: true }).click();
     await w.getByText('Start 1:1', { exact: true }).first().waitFor();
     await w.getByText('Start 1:1', { exact: true }).first().click();
-    await w.getByLabel('Meeting notes').fill('scratch');
+    await w.getByLabel('Meeting notes', { exact: true }).fill('scratch');
     w.once('dialog', (d) => { void d.dismiss(); });
     await w.getByText('Cancel', { exact: true }).click();
     await sleep(200);
-    expect(await w.getByLabel('Meeting notes').count()).toBe(1); // still in the mode
+    expect(await w.getByLabel('Meeting notes', { exact: true }).count()).toBe(1); // still in the mode
     w.once('dialog', (d) => { void d.accept(); });
     await w.getByText('Cancel', { exact: true }).click();
     await w.getByText('Start 1:1', { exact: true }).first().waitFor();
@@ -162,13 +163,13 @@ describe('source chip', () => {
 });
 
 describe('ready-made prompts', () => {
-  it('lists all eleven, shows their text and copies the prompt', async () => {
+  it('lists all built-ins, shows their text and copies the prompt', async () => {
     await w.evaluate(() => window.jaffloop.openSettings('mcp'));
     const s = await l.waitView('settings');
     await s.waitForSelector('[data-testid=prompt-card]');
-    expect(await s.locator('[data-testid=prompt-card]').count()).toBe(11);
+    expect(await s.locator('[data-testid=prompt-card]').count()).toBe(PROMPTS.length);
     expect(await s.getByText('No other connector needed').count()).toBeGreaterThan(0);
-    expect(await s.getByText('since: last Friday (optional)').count()).toBe(1);
+    expect(await s.getByText('since: last Friday (optional)').count()).toBeGreaterThan(0);
     expect(await s.getByText('never creates copies').count()).toBeGreaterThan(0);
 
     const card = s.locator('[data-prompt=monday-sweep]');

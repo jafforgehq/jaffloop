@@ -273,7 +273,7 @@ describe('Store behaviour', () => {
     const i = store.capture('owe @sara review fri #t', 'mcp', now);
     store.logInteraction(store.person('sara')!.id, '1on1', null, now);
     const d = JSON.parse(store.exportJSON());
-    expect(Object.keys(d)).toEqual(['interactions', 'items', 'people']);
+    expect(Object.keys(d)).toEqual(['custom_prompts', 'interactions', 'items', 'people']);
     expect(d.items[0]).toMatchObject({ id: i.id, kind: 'owe', person_id: i.personId, due_has_time: false, created_at: '2026-10-14T10:00:00Z', source: 'mcp' });
     expect(d.items[0]).not.toHaveProperty('body');
     expect(d.people[0]).toMatchObject({ handle: 'sara', hidden_from_claude: false, notes: '' });

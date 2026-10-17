@@ -111,7 +111,7 @@ describe('search, people, settings', () => {
   it('logging a 1:1 resets the days-since count', async () => {
     const sara = await api(async (a) => (await a.snapshot()).summaries.find((s) => s.person.handle === 'sara')!.person.id);
     await go(`person:${sara}`);
-    await w.getByRole('button', { name: 'Log 1:1' }).click();
+    await w.getByRole('button', { name: 'Log 1:1', exact: true }).click();
     await sleep(700);
     const s = await api(async (a) => (await a.snapshot()).summaries.find((x) => x.person.handle === 'sara')!.daysSinceLast);
     expect(s).toBe(0);

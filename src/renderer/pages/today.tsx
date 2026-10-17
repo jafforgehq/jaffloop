@@ -4,6 +4,7 @@ import { AllClosed } from '../components/all-closed';
 import { Burst } from '../components/burst';
 import { DateChips } from '../components/date-chips';
 import { Icon } from '../components/icons';
+import { Help } from '../components/info';
 import { ItemList } from '../components/item-row';
 import { Page, SectionBlock } from '../components/page';
 import { Avatar, Dot, GhostButton, QuietButton, SectionHeader, Segmented } from '../components/ui';
@@ -11,11 +12,14 @@ import { Fmt } from '../core';
 import type { PersonSummary } from '../../shared/types';
 import { ITEM_KINDS } from '../../shared/types';
 import type { TodayGroup } from '../../shared/api';
+import { tip, type HelpId } from '../help';
 import { useItemKeys } from '../hooks/use-item-keys';
 import { api, dismissCheckIn, dismissedCheckIns, drawerItemId, go, isCollapsed, openItems, orderedItems, person, showPeoplePalette, showSearch, showShortcuts, snapshot, todayPersonFilter, ui } from '../model';
 import { reviewCardText } from '../onboarding-logic';
 import { filterToday, localDay, shouldBurst, urgentCount } from '../speed-logic';
 import { todayBlocks, todayTotal } from '../ui-logic';
+
+const BLOCK_HELP: Record<string, HelpId> = { slipping: 'section.slipping', overdue: 'section.overdue', today: 'section.today', waiting: 'section.waiting', inbox: 'section.inbox', focus: 'section.focus' };
 
 function KindMix() {
   const total = todayTotal(snapshot.value.today);
@@ -23,7 +27,7 @@ function KindMix() {
   if (!counts.length) return <div style={{ height: 16 }} />;
   return (
     <div class="kindmix">
-      <div class="mono" style={{ color: 'var(--text)' }}>{openItems.value.length} open · {total} need you today</div>
+      <div class="mono row-flex" style={{ color: 'var(--text)' }}>{openItems.value.length} open · {total} need you today<Help id="today.mix" /></div>
       <div class="kindbar" aria-hidden="true">
         {counts.map(([k, c]) => <span key={k} style={{ flex: `${c} 1 0`, background: `var(--k-${k})`, opacity: 0.85 }} />)}
       </div>
@@ -41,8 +45,8 @@ function CheckInRow({ s }: { s: PersonSummary }) {
       <span>{s.person.name}</span>
       <span class="clay" style={{ fontSize: 12.5 }}>{s.daysSinceLast ?? 0} days since your last 1:1</span>
       <span class="grow" />
-      <QuietButton onClick={() => go(`person:${s.person.id}`)}>Schedule</QuietButton>
-      <QuietButton onClick={() => dismissCheckIn(s.person.id)}>Dismiss</QuietButton>
+      <QuietButton title={tip('today.checkinRow')} onClick={() => go(`person:${s.person.id}`)}>Schedule</QuietButton>
+      <QuietButton title={tip('today.checkinDismiss')} onClick={() => dismissCheckIn(s.person.id)}>Dismiss</QuietButton>
     </div>
   );
 }
@@ -95,7 +99,7 @@ export function TodayPage() {
       {proposed > 0 && (
         <div class="review-card" data-testid="review-card">
           <Icon name="sparkles" size={13} />
-          <span class="grow">{reviewCardText(proposed)}</span>
+          <span class="grow">{reviewCardText(proposed)}<Help id="today.reviewCard" /></span>
           <GhostButton onClick={() => go('inbox')}>Review in Inbox</GhostButton>
         </div>
       )}
@@ -104,38 +108,41 @@ export function TodayPage() {
           <Segmented<TodayGroup> label="Group by" value={group} onChange={(v) => { void api.setUiState({ todayGroup: v }); }}
             options={[{ value: 'section', label: 'Sections' }, { value: 'person', label: 'People' }, { value: 'kind', label: 'Kinds' }]} />
         </div>
-        <button type="button" class="btn toggle-btn" aria-pressed={focus} title="Show only your top 3" onClick={() => { void api.setUiState({ todayFocus: !focus }); }}>
+        <Help id="today.group" />
+        <button type="button" class="btn toggle-btn" aria-pressed={focus} title={tip('today.focus')} onClick={() => { void api.setUiState({ todayFocus: !focus }); }}>
           <Icon name="scope" size={13} /> Focus
         </button>
+        <Help id="today.focus" />
       </div>
       {who && (
         <div class="filter-row">
           <span class="chip filter-chip">Showing {who.name.split(/\s+/)[0]}
             <button type="button" aria-label="Show everyone" title="Show everyone  esc" onClick={() => { todayPersonFilter.value = null; }}><Icon name="xmark" size={9} /></button>
           </span>
+          <Help id="today.filter" />
         </div>
       )}
     </>
   );
 
   return (
-    <Page title="Today" subtitle={Fmt.short(Date.now(), 'EEEE, d MMMM')} header={header}>
+    <Page title="Today" help="page.today" subtitle={Fmt.short(Date.now(), 'EEEE, d MMMM')} header={header}>
       {burst && <Burst onDone={() => setBurst(false)} />}
       {total === 0 && checkIns.length === 0 ? (who
         ? <AllClosed title={`Nothing for ${who.name.split(/\s+/)[0]}`} message="No open items for them need you today." showCapture={false} />
         : <AllClosed />) : (
         <div>
           {blocks.map((b) => (
-            <SectionBlock key={b.id} id={`today.${b.id}`} title={b.title} count={b.items.length} tint={b.tint}><ItemList items={b.items} /></SectionBlock>
+            <SectionBlock key={b.id} id={`today.${b.id}`} title={b.title} count={b.items.length} tint={b.tint} help={BLOCK_HELP[b.id]}><ItemList items={b.items} /></SectionBlock>
           ))}
           {focus ? (
             <button type="button" class="link-btn" style={{ marginTop: 8 }} onClick={() => { void api.setUiState({ todayFocus: false }); }}>Show all {total}</button>
           ) : checkIns.length > 0 && (
-            <div class="section"><SectionHeader title="Check in" count={checkIns.length} />{checkIns.map((s) => <CheckInRow key={s.person.id} s={s} />)}</div>
+            <div class="section"><SectionHeader title="Check in" count={checkIns.length} help="today.checkin" />{checkIns.map((s) => <CheckInRow key={s.person.id} s={s} />)}</div>
           )}
           {!focus && <DateChips />}
           {snoozed > 0 && (
-            <button type="button" class="link-btn dim" style={{ marginTop: 14 }} onClick={() => go('snoozed')}>
+            <button type="button" class="link-btn dim" style={{ marginTop: 14 }} title={tip('today.snoozed')} onClick={() => go('snoozed')}>
               <Icon name="moon" size={12} /> {snoozed} snoozed
             </button>
           )}

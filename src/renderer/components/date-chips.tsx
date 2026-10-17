@@ -6,6 +6,7 @@ import { api, go, person, ui } from '../model';
 import { firstName } from '../people-logic';
 import { dateKey, localDay, visibleDates } from '../reports-logic';
 import { Icon } from './icons';
+import { Help } from './info';
 
 const KEY = 'jaffloop.dates.dismissed';
 function load(): Set<string> {
@@ -39,6 +40,7 @@ export function DateChips() {
           </span>
         );
       })}
+      <Help id="today.dates" />
     </div>
   );
 }

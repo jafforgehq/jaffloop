@@ -2,14 +2,16 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { Item, ItemKind } from '../../shared/types';
 import { ItemList } from '../components/item-row';
+import { Help } from '../components/info';
 import { Page } from '../components/page';
 import { GhostButton, SectionHeader } from '../components/ui';
 import { Fmt } from '../core';
+import type { HelpId } from '../help';
 import { titleLine } from '../onboarding-logic';
 import { api, itemsFor, openItems, person as personById, settings, snapshot, summary } from '../model';
 import { useReady } from './util';
 
-const SECTIONS: Array<[string, ItemKind]> = [['I owe them', 'owe'], ['They owe me', 'wait'], ['Bring up', 'bring']];
+const SECTIONS: Array<[string, ItemKind, HelpId]> = [['I owe them', 'owe', 'person.owe'], ['They owe me', 'wait', 'person.wait'], ['Bring up', 'bring', 'person.bring']];
 const Nothing = ({ text }: { text: string }) => <div class="dim" style={{ fontSize: 12.5, padding: 8 }}>{text}</div>;
 
 function SaidRow({ item }: { item: Item }) {
@@ -55,25 +57,25 @@ export function PersonBriefWindow() {
 
   return (
     <div class="main" style={{ height: '100%' }}>
-      <Page title={`Brief: ${p.name}`} subtitle={p.title ? `${titleLine(p)} · before you talk` : 'Before you talk'} header={<div style={{ paddingTop: 12 }}><GhostButton onClick={() => void copy()}>{copied ? 'Copied' : 'Copy as text'}</GhostButton></div>}>
+      <Page title={`Brief: ${p.name}`} subtitle={p.title ? `${titleLine(p)} · before you talk` : 'Before you talk'} header={<div class="row-flex" style={{ paddingTop: 12 }}><GhostButton onClick={() => void copy()}>{copied ? 'Copied' : 'Copy as text'}</GhostButton><Help id="brief.copy" /></div>} help="page.personBrief">
         {p.notes && (
           <div class="section">
-            <SectionHeader title="Notes" />
+            <SectionHeader title="Notes" help="brief.notes" />
             <div class="brief-notes">{p.notes}</div>
           </div>
         )}
-        {SECTIONS.map(([title, k]) => {
+        {SECTIONS.map(([title, k, help]) => {
           const items = itemsFor(p.id, k);
           return (
             <div key={k} class="section">
-              <SectionHeader title={title} count={items.length} />
+              <SectionHeader title={title} count={items.length} help={help} />
               {items.length === 0 && <Nothing text="Nothing." />}
               <ItemList items={items} showPerson={false} />
             </div>
           );
         })}
         <div class="section">
-          <SectionHeader title="Recently said" count={recent.length} />
+          <SectionHeader title="Recently said" count={recent.length} help="brief.said" />
           {recent.map((i) => <SaidRow key={i.id} item={i} />)}
         </div>
       </Page>
@@ -91,13 +93,13 @@ export function MorningBriefWindow() {
   const waits = open.filter((i) => i.kind === 'wait' && (Fmt.isStaleWait(i, now, settings.value) || Fmt.isOverdue(i, now)));
   return (
     <div class="main" style={{ height: '100%' }}>
-      <Page title="Good morning" subtitle={Fmt.short(now, 'EEEE, d MMMM')}>
+      <Page title="Good morning" help="page.morningBrief" subtitle={Fmt.short(now, 'EEEE, d MMMM')}>
         <div class="section">
-          <SectionHeader title="You owe, due today or earlier" count={due.length} />
+          <SectionHeader title="You owe, due today or earlier" count={due.length} help="brief.owed" />
           <ItemList items={due} />
         </div>
         <div class="section">
-          <SectionHeader title="Owed to you, stale or late" count={waits.length} />
+          <SectionHeader title="Owed to you, stale or late" count={waits.length} help="brief.waits" />
           <ItemList items={waits} />
         </div>
         {due.length === 0 && waits.length === 0 && <Nothing text="Clear start." />}

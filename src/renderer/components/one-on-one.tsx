@@ -6,9 +6,11 @@ import { useItemKeys } from '../hooks/use-item-keys';
 import { api, captureForReturning, endOneOnOne, itemsFor, openItems, saveReturning } from '../model';
 import { needsConfirm } from '../oneonone-logic';
 import { firstName, saidLine, timer } from '../people-logic';
+import { Help } from './info';
 import { MiniItem } from './interaction-history';
 import { ItemList } from './item-row';
 import { NotesField } from './notes-field';
+import type { HelpId } from '../help';
 import { Avatar, EmptySection, GhostButton, KIND_VAR, PrimaryButton, SectionHeader } from './ui';
 
 /** The said log of a person, re-fetched whenever the data changes. */
@@ -76,9 +78,9 @@ export function OneOnOne({ person, onEnd }: { person: Person; onEnd: () => void 
     drafts.delete(person.id);
     onEnd();
   };
-  const group = (title: string, items: Item[], empty: string) => items.length === 0
-    ? <EmptySection title={title} message={empty} />
-    : <div class="section"><SectionHeader title={title} count={items.length} /><ItemList items={items} showPerson={false} showKind={false} /></div>;
+  const group = (title: string, items: Item[], empty: string, help: HelpId) => items.length === 0
+    ? <EmptySection title={title} message={empty} help={help} />
+    : <div class="section"><SectionHeader title={title} count={items.length} help={help} /><ItemList items={items} showPerson={false} showKind={false} /></div>;
 
   return (
     <div class="oneonone">
@@ -86,37 +88,39 @@ export function OneOnOne({ person, onEnd }: { person: Person; onEnd: () => void 
         <Avatar person={person} size={36} />
         <div class="grow">
           <h1 class="title sm" style={{ fontSize: 20 }}>1:1 with {person.name}</h1>
-          <div class="dim tnum" style={{ fontSize: 12, marginTop: 2 }}>{timer(elapsed)}</div>
+          <div class="dim tnum row-flex" style={{ fontSize: 12, marginTop: 2 }}>{timer(elapsed)}<Help id="oo.timer" size={12} /></div>
         </div>
         <GhostButton onClick={cancel}>Cancel</GhostButton>
+        <Help id="oo.cancel" />
         <PrimaryButton onClick={() => { void finish(); }} disabled={busy}>End 1:1 and log it</PrimaryButton>
+        <Help id="oo.end" />
       </div>
       <div class="hairline" />
       <div class="oo-body">
         <div class="oo-main">
-          {group('Bring up', bring, 'Nothing to bring up.')}
-          {group(`I owe ${first}`, owe, 'You owe nothing.')}
-          {group(`${first} owes me`, wait, 'Nothing pending.')}
+          {group('Bring up', bring, 'Nothing to bring up.', 'oo.bring')}
+          {group(`I owe ${first}`, owe, 'You owe nothing.', 'oo.owe')}
+          {group(`${first} owes me`, wait, 'Nothing pending.', 'oo.wait')}
         </div>
         <div class="vline" />
         <div class="oo-side">
-          <span class="caps">Meeting notes</span>
+          <span class="caps row-flex">Meeting notes<Help id="oo.notes" /></span>
           <textarea class="notes-field oo-notes" value={notes} aria-label="Meeting notes" placeholder={`Saved with this 1:1 when you end it. Jot down what ${first} and you discussed.`}
             onInput={(e) => setNotes((e.target as HTMLTextAreaElement).value)} />
-          <span class="caps" style={{ marginTop: 6 }}>What you said</span>
+          <span class="caps row-flex" style={{ marginTop: 6 }}>What you said<Help id="oo.said" /></span>
           <input class="input" value={said} placeholder="A promise or a quote, saved word for word" aria-label="What you said"
             onInput={(e) => setSaid((e.target as HTMLInputElement).value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.isComposing) submitSaid(); }} />
           {log.slice(0, 3).map((i) => <SaidRow key={i.id} item={i} />)}
-          <span class="caps" style={{ marginTop: 6 }}>Capture</span>
+          <span class="caps row-flex" style={{ marginTop: 6 }}>Capture<Help id="oo.capture" /></span>
           <input class="input" value={quick} placeholder="owe, wait or bring…" aria-label="Capture"
             onInput={(e) => setQuick((e.target as HTMLInputElement).value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.isComposing) submitQuick(); }} />
           <div class="oo-captured" data-testid="captured">
-            <span class="caps">Captured in this 1:1</span>
+            <span class="caps row-flex">Captured in this 1:1<Help id="oo.captured" /></span>
             {shown.length === 0 ? <span class="dim" style={{ fontSize: 12 }}>Nothing yet. Items you add here are linked to this 1:1.</span> : shown.map((i) => <MiniItem key={i.id} item={i} showKind />)}
           </div>
-          <span class="caps" style={{ marginTop: 6 }}>Notes about {first}</span>
+          <span class="caps row-flex" style={{ marginTop: 6 }}>Notes about {first}<Help id="oo.aboutPerson" /></span>
           <NotesField key={person.id} person={person} />
         </div>
       </div>

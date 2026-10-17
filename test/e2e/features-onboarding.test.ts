@@ -27,7 +27,7 @@ describe('welcome to wizard on an empty database', () => {
   it('the welcome screen offers "Add your team" and opens the wizard', async () => {
     await w.getByRole('dialog', { name: 'Welcome to Jaffloop' }).waitFor();
     await w.screenshot({ path: path.join(OUT, 'welcome-add-team.png') });
-    await w.getByRole('dialog', { name: 'Welcome to Jaffloop' }).getByRole('button', { name: 'Add your team' }).click();
+    await w.getByRole('dialog', { name: 'Welcome to Jaffloop' }).getByRole('button', { name: 'Add your team', exact: true }).click();
     await dialog().waitFor();
     expect(await w.getByRole('dialog', { name: 'Welcome to Jaffloop' }).count()).toBe(0);
     expect(await people()).toHaveLength(0);
@@ -36,20 +36,20 @@ describe('welcome to wizard on an empty database', () => {
   it('adds two people with position, cadence, birthday and emails, and lists them as it goes', async () => {
     const d = dialog();
     await d.getByLabel('Name', { exact: true }).fill('Sara Lindqvist');
-    await d.getByLabel('Position').fill('Staff engineer');
+    await d.getByLabel('Position', { exact: true }).fill('Staff engineer');
     await d.getByRole('button', { name: 'Every 7 days' }).click();
     await d.getByLabel('Birthday month').selectOption({ label: 'March' });
     await d.getByLabel('Birthday day').selectOption('14');
-    await d.getByLabel('Work emails').fill('sara@example.com');
+    await d.getByLabel('Work emails', { exact: true }).fill('sara@example.com');
     await w.screenshot({ path: path.join(OUT, 'wizard-form.png') });
-    await d.getByRole('button', { name: 'Save and add another' }).click();
+    await d.getByRole('button', { name: 'Save and add another', exact: true }).click();
     await d.getByTestId('added-person').first().waitFor();
     expect(await d.getByLabel('Name', { exact: true }).inputValue()).toBe('');
     expect(await d.getByTestId('added-person').first().textContent()).toContain('Staff engineer');
 
     // second person: custom cadence with the stepper, saved with Cmd+Enter
     await d.getByLabel('Name', { exact: true }).fill('Amir Haddad');
-    await d.getByLabel('Position').fill('Senior engineer');
+    await d.getByLabel('Position', { exact: true }).fill('Senior engineer');
     await d.getByRole('button', { name: 'More days' }).click();
     expect(await d.getByTestId('cadence-text').textContent()).toBe('every 15 days');
     await w.keyboard.press('Meta+Enter');
@@ -66,8 +66,8 @@ describe('welcome to wizard on an empty database', () => {
   it('reports a person who is already in the list and overwrites nothing', async () => {
     const d = dialog();
     await d.getByLabel('Name', { exact: true }).fill('sara lindqvist');
-    await d.getByLabel('Position').fill('Intern');
-    await d.getByRole('button', { name: 'Save and add another' }).click();
+    await d.getByLabel('Position', { exact: true }).fill('Intern');
+    await d.getByRole('button', { name: 'Save and add another', exact: true }).click();
     await d.getByRole('alert').waitFor();
     expect(await d.getByRole('alert').textContent()).toBe('Sara Lindqvist is already in your list');
     expect((await people()).find((p) => p.handle === 'sara.lindqvist')!.title).toBe('Staff engineer');
@@ -77,7 +77,7 @@ describe('welcome to wizard on an empty database', () => {
   it('Done with an empty form closes the wizard and opens People with both of them', async () => {
     const d = dialog();
     await d.getByLabel('Name', { exact: true }).fill('');
-    await d.getByRole('button', { name: 'Done' }).click();
+    await d.getByRole('button', { name: 'Done', exact: true }).click();
     await d.waitFor({ state: 'detached' });
     await w.getByText('Added 2 people').waitFor();
     const rows = await w.locator('.people-list .prow').allTextContents();
@@ -104,8 +104,8 @@ describe('People page and person page', () => {
     const d = w.getByRole('dialog', { name: 'Add person' });
     await d.waitFor();
     await d.getByLabel('Name', { exact: true }).fill('Priya Nair');
-    await d.getByLabel('Position').fill('Junior engineer');
-    await d.getByLabel('Relation').selectOption('peer');
+    await d.getByLabel('Position', { exact: true }).fill('Junior engineer');
+    await d.getByLabel('Relation', { exact: true }).selectOption('peer');
     await d.getByRole('button', { name: 'No cadence' }).click();
     expect(await d.getByTestId('cadence-text').textContent()).toBe('no cadence');
     await d.getByRole('button', { name: 'Add person' }).click();
@@ -115,9 +115,9 @@ describe('People page and person page', () => {
   });
 
   it('the edit sheet changes the position, the grid shows it, and the people palette finds it', async () => {
-    await w.getByRole('button', { name: 'Person options' }).click();
+    await w.getByRole('button', { name: 'Person options', exact: true }).click();
     await w.getByRole('menuitem', { name: 'Edit person…' }).click();
-    const pos = w.getByRole('dialog').getByLabel('Position');
+    const pos = w.getByRole('dialog').getByLabel('Position', { exact: true });
     await pos.fill('Engineering manager');
     await pos.press('Enter');
     await w.locator('.subtitle', { hasText: 'Engineering manager · peer' }).waitFor();
@@ -141,9 +141,9 @@ describe('People page and person page', () => {
     // an empty database again: a second app against a fresh directory
     const e = await launchApp({ seed: false, env: { JAFFLOOP_SNAPSHOT: '1' } });
     try {
-      await e.window.getByRole('dialog', { name: 'Welcome to Jaffloop' }).getByRole('button', { name: 'Start' }).click();
+      await e.window.getByRole('dialog', { name: 'Welcome to Jaffloop' }).getByRole('button', { name: 'Start', exact: true }).click();
       await e.window.evaluate(() => window.jaffloop.openMain('people'));
-      await e.window.getByRole('main').getByRole('button', { name: 'Add your team' }).click();
+      await e.window.getByRole('main').getByRole('button', { name: 'Add your team', exact: true }).click();
       await e.window.getByRole('dialog', { name: 'Add your team' }).waitFor();
       await e.window.keyboard.press('Escape');
 

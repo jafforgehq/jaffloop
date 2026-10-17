@@ -10,6 +10,7 @@ import { WrapupCard } from '../components/wrapup';
 import {
   api, drawerItem, drawerItemId, nav, navTitle, openItems, refreshDrawerItem, showOnboarding, showPeoplePalette, showSearch, showShortcuts, showWelcome, summaries, ui,
 } from '../model';
+import { tip } from '../help';
 import { OnboardingView } from '../overlays/onboarding';
 import { PeoplePalette } from '../overlays/people-palette';
 import { SearchPalette } from '../overlays/search';
@@ -81,7 +82,7 @@ export function MainWindow() {
       {item && drawerItemId.value === item.id && <><div class="vline" /><ItemDrawer key={item.id} item={item} /></>}
 
       {hidden && (
-        <button type="button" class="btn quiet icon nodrag show-sidebar" aria-label="Show sidebar" title="Show sidebar  ⌘\" onClick={() => { void api.setUiState({ sidebarHidden: false }); }}>
+        <button type="button" class="btn quiet icon nodrag show-sidebar" aria-label="Show sidebar" title={tip('sidebar.show')} onClick={() => { void api.setUiState({ sidebarHidden: false }); }}>
           <Icon name="sidebar" size={14} />
         </button>
       )}

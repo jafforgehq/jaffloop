@@ -2,6 +2,14 @@
 
 Also shown inside the app (What's new). Newest first.
 
+## 0.5.0 (2026-10-17): Make your own prompts, scheduled sweeps and an (i) on every action
+
+- Make a prompt: describe what you want, copy the instruction into Claude, and Claude writes and saves the prompt. It waits for your approval in Settings → Claude (MCP) before it becomes a slash command.
+- Two new prompts for the connectors you use: a Teams sweep (chat promises and asks) and Confluence mentions and reviews.
+- Run on a schedule: pick a sweep, a time and weekdays, and Jaffloop sets up a job on this Mac that runs it with Claude Code. Sync health shows, per source, what Claude imported and when it last did.
+- An (i) button next to every action, setting and tool explains what it does when you hover it, including a list of everything Claude can do.
+- Review what Claude adds is now on by default, you can choose whether Claude may read your 1:1 notes, and Settings warns when Jaffloop is run from a disk image.
+
 ## 0.4.0 (2026-10-16): Add your team, positions, save_person and review what Claude adds
 
 - Add your team: a short guided setup (name, position, relation, 1:1 cadence, birthday, start date, work email) on first run, from the People page and from Settings. Change anything later on the person page.

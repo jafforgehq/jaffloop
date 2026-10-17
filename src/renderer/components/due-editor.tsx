@@ -2,7 +2,9 @@
 import { useState } from 'preact/hooks';
 import { Fmt } from '../core';
 import { addDays, nextMonday, startOfDay } from '../ui-logic';
+import { tip } from '../help';
 import { Icon } from './icons';
+import { Help } from './info';
 import { GhostButton, PrimaryButton, QuietButton } from './ui';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -15,7 +17,7 @@ export function DueEditor({ current, hasTime, onApply }: { current: number | nul
   const [time, setTime] = useState(`${pad(new Date(initial).getHours())}:${pad(new Date(initial).getMinutes())}`);
 
   const today = startOfDay(Date.now());
-  const preset = (label: string, ms: number) => <GhostButton onClick={() => onApply(ms, false)}>{label}</GhostButton>;
+  const preset = (label: string, ms: number) => <GhostButton title={tip('due.preset')} onClick={() => onApply(ms, false)}>{label}</GhostButton>;
 
   // six weeks starting on the Monday on or before the 1st
   const first = new Date(month);
@@ -58,10 +60,13 @@ export function DueEditor({ current, hasTime, onApply }: { current: number | nul
           })}
         </div>
       </div>
-      <label class="row-flex gap8" style={{ fontSize: 12 }}>
-        <input type="checkbox" checked={withTime} onChange={(e) => setWithTime((e.target as HTMLInputElement).checked)} /> Include a time
+      <div class="row-flex gap8" style={{ fontSize: 12 }}>
+        <label class="row-flex gap8">
+          <input type="checkbox" checked={withTime} onChange={(e) => setWithTime((e.target as HTMLInputElement).checked)} /> Include a time
+        </label>
+        <Help id="due.time" size={12} />
         {withTime && <input type="time" class="input" style={{ width: 96, padding: '2px 6px' }} value={time} aria-label="Time" onInput={(e) => setTime((e.target as HTMLInputElement).value)} />}
-      </label>
+      </div>
       <div class="row-flex" style={{ justifyContent: 'space-between' }}>
         {current != null ? <QuietButton onClick={() => onApply(null, false)}>Clear</QuietButton> : <span />}
         <PrimaryButton onClick={apply}>Set</PrimaryButton>

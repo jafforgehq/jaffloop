@@ -9,6 +9,7 @@ import {
   complete, copyNudge, dragPayload, drop, filterTodayBy, movePin, multi, openItems, person, rename, selectedItemId, settings, snooze, snoozePresetsFor, toggleMulti, togglePin,
   triggerComplete, triggerEdit, ui, updateItem, drawerItemId,
 } from '../model';
+import { tip } from '../help';
 import { firstName as firstOf } from '../speed-logic';
 import { Dropdown } from './dropdown';
 import { DueEditor } from './due-editor';
@@ -20,7 +21,7 @@ const PAD: Record<Density, number> = { compact: 4, comfortable: 7, spacious: 11 
 const firstName = firstOf;
 
 /** Snooze menu (presets + a custom date). `onPick` gets the epoch ms to come back at. */
-export function SnoozeMenu({ onPick, label = 'Snooze', face, className, item }: { onPick: (until: number) => void; label?: string; face?: preact.ComponentChildren; className?: string; item?: Pick<Item, 'personId'> | null }) {
+export function SnoozeMenu({ onPick, label = 'Snooze', face, className, item, title }: { onPick: (until: number) => void; label?: string; face?: preact.ComponentChildren; className?: string; item?: Pick<Item, 'personId'> | null; title?: string }) {
   const [custom, setCustom] = useState(false);
   const [value, setValue] = useState(() => toLocalInput(Date.now() + 3 * 3_600_000));
   const wrap = useRef<HTMLSpanElement>(null);
@@ -31,7 +32,7 @@ export function SnoozeMenu({ onPick, label = 'Snooze', face, className, item }: 
   ];
   return (
     <span ref={wrap} class="row-flex">
-      <Dropdown label={label} title={label} className={className} face={face ?? <Icon name="clock" size={13} />} items={items} />
+      <Dropdown label={label} title={title ?? tip('row.snooze')} className={className} face={face ?? <Icon name="clock" size={13} />} items={items} />
       <Popover anchor={wrap.current} open={custom} onClose={() => setCustom(false)} width={240}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input type="datetime-local" class="input" aria-label="Snooze until" value={value} onInput={(e) => setValue((e.target as HTMLInputElement).value)} />
@@ -111,7 +112,7 @@ export function ItemRow({ item, index = 0, showPerson = true, showKind = true, c
     movePin(payload, item.id);
   };
 
-  const nudge = item.kind === 'wait' && p ? [{ label: 'Copy nudge message', onClick: () => copyNudge(item) }] : [];
+  const nudge = item.kind === 'wait' && p ? [{ label: 'Copy nudge message', hint: tip('row.nudge'), onClick: () => copyNudge(item) }] : [];
   const stale = age != null && Fmt.isStaleWait(item, now, settings.value);
   const level = age != null ? Fmt.ageLevel(age) : 0;
   const rule = item.recurRule;
@@ -127,16 +128,16 @@ export function ItemRow({ item, index = 0, showPerson = true, showKind = true, c
       onDrop={onDrop}
       onClick={onClick}
       onContextMenu={(e) => openContextMenu(e, [
-        { label: 'Complete', onClick: finish },
-        { label: 'Edit title', onClick: beginEdit },
-        { label: 'Details', onClick: details },
+        { label: 'Complete', hint: tip('row.complete'), onClick: finish },
+        { label: 'Edit title', hint: tip('row.edit'), onClick: beginEdit },
+        { label: 'Details', hint: tip('row.details'), onClick: details },
         ...nudge,
-        ...snoozePresetsFor(item).map((s) => ({ label: `Snooze: ${s.label}`, onClick: () => snoozeRow(s.date) })),
+        ...snoozePresetsFor(item).map((s) => ({ label: `Snooze: ${s.label}`, hint: tip('row.snoozeSet'), onClick: () => snoozeRow(s.date) })),
         { divider: true },
-        { label: item.pinned ? 'Unpin' : 'Pin to top', onClick: () => { void togglePin(item); } },
-        { label: 'Drop', danger: true, onClick: () => { void drop(item); } },
+        { label: item.pinned ? 'Unpin' : 'Pin to top', hint: tip('row.pin'), onClick: () => { void togglePin(item); } },
+        { label: 'Drop', hint: tip('row.drop'), danger: true, onClick: () => { void drop(item); } },
       ])}>
-      <button type="button" class="ring-btn" aria-label={`Complete ${item.title}`} title="Complete  ⏎" onClick={(e) => { e.stopPropagation(); finish(); }}
+      <button type="button" class="ring-btn" aria-label={`Complete ${item.title}`} title={tip('row.complete')} onClick={(e) => { e.stopPropagation(); finish(); }}
         onMouseEnter={() => setRingHover(true)} onMouseLeave={() => setRingHover(false)}>
         <LoopRing size={16} hot={overdue || slipping} closed={completing} preview={ringHover && !completing} />
       </button>
@@ -153,23 +154,23 @@ export function ItemRow({ item, index = 0, showPerson = true, showKind = true, c
         {ghost && <div class="row-ghost">{ghost}</div>}
       </div>
 
-      {rule && <span class="dim" title={`Repeats: ${Fmt.recurrenceText(rule)}`} aria-label={`Repeats ${Fmt.recurrenceText(rule)}`}><Icon name="repeat" size={11} /></span>}
+      {rule && <span class="dim" title={`Repeats ${Fmt.recurrenceText(rule)}. ${tip('row.repeat')}`} aria-label={`Repeats ${Fmt.recurrenceText(rule)}`}><Icon name="repeat" size={11} /></span>}
       {age != null && (
         <span class="mono age" data-level={level} style={{ color: ['var(--text2)', 'var(--k-owe)', 'var(--clay)'][level], textDecoration: stale ? 'underline' : 'none', textDecorationColor: 'var(--clay)' }}
-          title={stale ? `Stale: waiting longer than your limit. Open ${age} days.` : `Open for ${age} days, since ${Fmt.short(item.createdAt, 'EEEE d MMMM')}`}>{age}d</span>
+          title={stale ? `Stale: waiting longer than your limit. Open ${age} days.` : `Open for ${age} days, since ${Fmt.short(item.createdAt, 'EEEE d MMMM')}. ${tip('row.age')}`}>{age}d</span>
       )}
-      {item.pinned && <span class="dim" aria-label="Pinned" title="Pinned"><Icon name="pin" size={11} /></span>}
-      {slipping && <span class="pill mono" title={`Snoozed ${item.snoozeCount} times`}>{compact ? `×${item.snoozeCount}` : `slipping ×${item.snoozeCount}`}</span>}
+      {item.pinned && <span class="dim" aria-label="Pinned" title={tip('row.pinned')}><Icon name="pin" size={11} /></span>}
+      {slipping && <span class="pill mono" title={`Snoozed ${item.snoozeCount} times. ${tip('row.slipping')}`}>{compact ? `×${item.snoozeCount}` : `slipping ×${item.snoozeCount}`}</span>}
 
       {!ghost && !editing && (
         <span class="hover-only">
           <SnoozeMenu item={item} onPick={snoozeRow} />
-          <Dropdown label="More actions" face={<Icon name="ellipsis" size={14} />} items={[
-            { label: 'Edit title', onClick: beginEdit },
-            { label: 'Details', onClick: details },
+          <Dropdown label="More actions" title={tip('row.more')} face={<Icon name="ellipsis" size={14} />} items={[
+            { label: 'Edit title', hint: tip('row.edit'), onClick: beginEdit },
+            { label: 'Details', hint: tip('row.details'), onClick: details },
             ...nudge,
-            { label: item.pinned ? 'Unpin' : 'Pin to top', onClick: () => { void togglePin(item); } },
-            { label: 'Drop', danger: true, onClick: () => { void drop(item); } },
+            { label: item.pinned ? 'Unpin' : 'Pin to top', hint: tip('row.pin'), onClick: () => { void togglePin(item); } },
+            { label: 'Drop', hint: tip('row.drop'), danger: true, onClick: () => { void drop(item); } },
           ]} />
         </span>
       )}
@@ -177,12 +178,12 @@ export function ItemRow({ item, index = 0, showPerson = true, showKind = true, c
       {showKind && <span class="c-kind"><KindLabel kind={item.kind} /></span>}
       {showPerson && (
         <span class="c-person">{p && (
-          <button type="button" class="person-hit" title={`Show only ${firstName(p.name)}`} aria-label={`Show only ${firstName(p.name)} on Today`}
+          <button type="button" class="person-hit" title={`Show only ${firstName(p.name)}. ${tip('row.person')}`} aria-label={`Show only ${firstName(p.name)} on Today`}
             onClick={(e) => { e.stopPropagation(); filterTodayBy(p.id); }}><Avatar person={p} size={16} /><span class="ellipsis">{firstName(p.name)}</span></button>
         )}</span>
       )}
       <button type="button" ref={dueBtn} class={`c-date date-btn ${overdue ? 'overdue' : ''} ${dueText ? '' : 'empty'}`}
-        title={dueTip ? `${dueTip} (click to change)` : 'Set a due date'}
+        title={dueTip ? `${dueTip}. ${tip('row.due')}` : tip('row.due')}
         aria-label={dueText ? `${overdue ? 'Overdue, ' : 'Due '}${dueText}. Change date` : 'Set a due date'}
         onClick={(e) => { e.stopPropagation(); if (Date.now() - dueClosedAt.current < 250) return; setShowDue(true); }}>
         {dueText ?? (compact ? null : <Icon name="calendar-plus" size={12} />)}

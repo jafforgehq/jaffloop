@@ -2,6 +2,7 @@
 import { AllClosed } from '../components/all-closed';
 import { ItemList } from '../components/item-row';
 import { Page } from '../components/page';
+import { Help } from '../components/info';
 import { QuietButton } from '../components/ui';
 import { useFetched } from '../hooks/use-fetched';
 import { useItemKeys } from '../hooks/use-item-keys';
@@ -14,10 +15,11 @@ export function FilterPage({ query }: { query: string }) {
     <div class="row-flex gap8" style={{ marginTop: 12 }}>
       <span class="dim" style={{ fontSize: 12.5 }}>{items ? `${items.length} match${items.length === 1 ? '' : 'es'}` : ''}</span>
       <QuietButton onClick={() => removeFilter(query)}>Remove filter</QuietButton>
+      <Help id="filter.remove" />
     </div>
   );
   return (
-    <Page title="Filter" subtitle={query} header={header}>
+    <Page title="Filter" help="page.filter" subtitle={query} header={header}>
       {items && items.length === 0 && <AllClosed title="No matches" message="Nothing matches this search right now." showCapture={false} />}
       {items && <div style={{ marginTop: 8 }}><ItemList items={items} /></div>}
     </Page>

@@ -46,7 +46,7 @@ export function Dropdown({ face, items, label, title, className = 'btn quiet ico
       {open && (
         <div class="menu" ref={pane} role="menu" onKeyDown={arrows} onClick={(e) => e.stopPropagation()}>
           {items.map((it, i) => it.divider ? <hr key={i} /> : (
-            <button type="button" role="menuitem" key={i} disabled={it.disabled} style={it.danger ? { color: 'var(--clay)' } : undefined}
+            <button type="button" role="menuitem" key={i} disabled={it.disabled} title={it.hint} style={it.danger ? { color: 'var(--clay)' } : undefined}
               onClick={(e) => { e.stopPropagation(); setOpen(false); it.onClick?.(); }}>
               <span style={{ width: 12 }}>{it.checked ? <Icon name="check" size={11} /> : null}</span>{it.label}
             </button>

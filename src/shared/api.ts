@@ -4,7 +4,7 @@
 // The preload script builds window.jaffloop from API_METHODS, so adding a method means: add it to the interface AND the list.
 
 import type { ThemeName } from './themes-meta';
-import type { ActivityEntry, HeatRow, Interaction, InteractionWithItems, InteractionKind, Item, ItemFilter, ItemSource, KeptRate, ParsedCapture, Person, ReviewData, Snapshot, UpcomingDate } from './types';
+import type { ActivityEntry, CustomPrompt, CustomPromptInput, Schedule, SyncHealth, HeatRow, Interaction, InteractionWithItems, InteractionKind, Item, ItemFilter, ItemSource, KeptRate, ParsedCapture, Person, ReviewData, Snapshot, UpcomingDate } from './types';
 
 export type Density = 'compact' | 'comfortable' | 'spacious';
 export type AppearanceChoice = 'system' | 'light' | 'dark';
@@ -135,6 +135,20 @@ export interface Api {
   acceptProposed(ids: string[]): Promise<void>;
   /** dismiss proposed items: dropped, and never re-imported because their external id stays known */
   dismissProposed(ids: string[]): Promise<void>;
+  /** all custom prompts, approved or not, by title */
+  customPrompts(): Promise<CustomPrompt[]>;
+  /** create or edit a custom prompt from the app: saved as approved (the user wrote or reviewed it); returns the saved prompt or an error text */
+  saveCustomPrompt(p: CustomPromptInput): Promise<{ prompt?: CustomPrompt; error?: string }>;
+  /** approve a prompt Claude saved so it is served as an MCP prompt */
+  approveCustomPrompt(id: string): Promise<void>;
+  deleteCustomPrompt(id: string): Promise<void>;
+  /** imports per source and the last Claude write */
+  syncHealth(): Promise<SyncHealth>;
+  /** the scheduled sweeps installed on this Mac */
+  schedules(): Promise<Schedule[]>;
+  /** write and load the launchd job (replaces one for the same prompt); returns an error text when it could not */
+  saveSchedule(s: Omit<Schedule, 'logPath'>): Promise<{ schedule?: Schedule; error?: string }>;
+  removeSchedule(promptId: string): Promise<void>;
   /** pause or resume notifications; null resumes */
   pauseNotifications(untilMs: number | null): Promise<void>;
 
@@ -176,7 +190,7 @@ export interface Api {
 export const API_METHODS = [
   'snapshot', 'item', 'items', 'search', 'history', 'snoozed', 'tagsOf', 'setTags', 'saidLog', 'interactions', 'capture', 'parse',
   'update', 'restore', 'complete', 'drop', 'reopen', 'snooze', 'assign', 'savePerson', 'addPerson', 'logInteraction',
-  'interactionHistory', 'logOneOnOne', 'acceptProposed', 'dismissProposed', 'captureMany', 'review', 'keptRate', 'activity', 'heatGrid', 'onTimeStreak', 'upcomingDates', 'pauseNotifications',
+  'interactionHistory', 'logOneOnOne', 'acceptProposed', 'dismissProposed', 'customPrompts', 'saveCustomPrompt', 'approveCustomPrompt', 'deleteCustomPrompt', 'syncHealth', 'schedules', 'saveSchedule', 'removeSchedule', 'captureMany', 'review', 'keptRate', 'activity', 'heatGrid', 'onTimeStreak', 'upcomingDates', 'pauseNotifications',
   'uiState', 'setUiState', 'appInfo', 'saveSettings',
   'openMain', 'openCapture', 'captureSubmit', 'captureHide', 'openSettings', 'openPersonBrief', 'openMorningBrief', 'closeWindow',
   'setHotkey', 'playSound', 'copyText', 'openExternal', 'revealDatabase', 'exportData', 'quit',

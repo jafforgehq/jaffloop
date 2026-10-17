@@ -1,6 +1,7 @@
 // ⌘P: jump to a person. Type to filter, arrows and Enter to go, Esc to close.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Icon } from '../components/icons';
+import { Help } from '../components/info';
 import { Avatar, Kbd } from '../components/ui';
 import { go, recentPeople, showPeoplePalette, summaries } from '../model';
 import { lastOneOnOne, matchPeople } from '../speed-logic';
@@ -42,6 +43,7 @@ function Palette() {
           <span class="dim"><Icon name="person2" size={15} /></span>
           <input ref={input} class="palette-input" value={query} spellcheck={false} aria-label="Person" placeholder="Jump to a person…"
             onInput={(e) => { setQuery((e.target as HTMLInputElement).value); setSel(0); }} />
+          <Help id="people.palette" />
           <Kbd>esc</Kbd>
         </div>
         <div class="hairline" />

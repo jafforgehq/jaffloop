@@ -2,6 +2,8 @@
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ItemKind, Person } from '../../shared/types';
+import { type HelpId, tip } from '../help';
+import { Help } from './info';
 import { Icon } from './icons';
 
 export const KIND_VAR: Record<ItemKind, string> = {
@@ -76,7 +78,7 @@ export function CadenceRing({ person, daysSince, overdue, size = 56, pulse = fal
   const target = person.cadenceDays && person.cadenceDays > 0 ? (daysSince == null ? 1 : Math.min(1, daysSince / person.cadenceDays)) : 0;
   const label = person.cadenceDays == null ? 'No 1:1 cadence' : overdue ? 'Past 1:1 cadence' : 'Within 1:1 cadence';
   return (
-    <span class="loop" role="img" aria-label={label} style={{ width: size, height: size, transform: pulse ? 'scale(1.12)' : 'none', transition: 'transform 0.3s cubic-bezier(0.3,1.6,0.6,1)' }}>
+    <span class="loop" role="img" aria-label={label} title={`${label}. ${tip('people.ring')}`} style={{ width: size, height: size, transform: pulse ? 'scale(1.12)' : 'none', transition: 'transform 0.3s cubic-bezier(0.3,1.6,0.6,1)' }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--hairline)" stroke-width={line} />
         {person.cadenceDays != null && (
@@ -90,24 +92,26 @@ export function CadenceRing({ person, daysSince, overdue, size = 56, pulse = fal
   );
 }
 
-export function SectionHeader({ title, count, tint, children }: { title: string; count?: number; tint?: string; children?: ComponentChildren }) {
+export function SectionHeader({ title, count, tint, help, children }: { title: string; count?: number; tint?: string; help?: HelpId; children?: ComponentChildren }) {
   return (
     <div class="section-head" role="heading" aria-level={2}>
       <span class="caps" style={tint ? { color: tint } : undefined}>{title}</span>
       {count != null && <span class="dim tnum" style={{ fontSize: 11.5 }}>{count}</span>}
+      {help && <Help id={help} />}
       <span class="rule" />
       {children}
     </div>
   );
 }
 
-export function EmptySection({ title, message }: { title: string; message: string }) {
-  return <div class="empty-section"><span class="caps">{title}</span><span class="dim" style={{ fontSize: 12.5 }}>{message}</span></div>;
+export function EmptySection({ title, message, help }: { title: string; message: string; help?: HelpId }) {
+  return <div class="empty-section"><span class="caps">{title}</span>{help && <Help id={help} />}<span class="dim" style={{ fontSize: 12.5 }}>{message}</span></div>;
 }
 
 // ---------- popups ----------
 
-export interface MenuItem { label?: ComponentChildren; onClick?: () => void; divider?: boolean; danger?: boolean; checked?: boolean; disabled?: boolean }
+/** `hint` is what the entry does, shown as a tooltip. */
+export interface MenuItem { label?: ComponentChildren; hint?: string; onClick?: () => void; divider?: boolean; danger?: boolean; checked?: boolean; disabled?: boolean }
 
 function useOutside(open: boolean, close: () => void, ref: { current: HTMLElement | null }) {
   useEffect(() => {
@@ -138,7 +142,7 @@ export function Popover({ anchor, open, onClose, children, width }: { anchor: HT
   return <div class="menu" ref={ref} style={{ width, padding: 12 }} role="dialog">{children}</div>;
 }
 
-export function MenuButton({ button, items, label, align }: { button: ComponentChildren; items: MenuItem[]; label: string; align?: 'right' }) {
+export function MenuButton({ button, items, label, title, align }: { button: ComponentChildren; items: MenuItem[]; label: string; title?: string; align?: 'right' }) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -146,11 +150,11 @@ export function MenuButton({ button, items, label, align }: { button: ComponentC
   useEffect(() => { if (open) { place(btn.current, ref.current); if (align === 'right' && ref.current && btn.current) { const a = btn.current.getBoundingClientRect(); ref.current.style.left = `${Math.max(8, a.right - ref.current.offsetWidth)}px`; } } });
   return (
     <>
-      <button type="button" ref={btn} class="btn quiet icon" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>{button}</button>
+      <button type="button" ref={btn} class="btn quiet icon" aria-label={label} title={title ?? label} aria-haspopup="menu" aria-expanded={open} onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>{button}</button>
       {open && (
         <div class="menu" ref={ref} role="menu">
           {items.map((it, i) => it.divider ? <hr key={i} /> : (
-            <button type="button" role="menuitem" key={i} disabled={it.disabled} style={it.danger ? { color: 'var(--clay)' } : undefined}
+            <button type="button" role="menuitem" key={i} disabled={it.disabled} title={it.hint} style={it.danger ? { color: 'var(--clay)' } : undefined}
               onClick={(e) => { e.stopPropagation(); setOpen(false); it.onClick?.(); }}>
               <span style={{ width: 12 }}>{it.checked ? <Icon name="check" size={11} /> : null}</span>{it.label}
             </button>
@@ -176,6 +180,7 @@ export function openContextMenu(e: MouseEvent, items: MenuItem[]) {
     const b = document.createElement('button');
     b.type = 'button'; b.setAttribute('role', 'menuitem'); b.textContent = String(it.label ?? '');
     if (it.danger) b.style.color = 'var(--clay)';
+    if (it.hint) b.title = it.hint;
     b.onclick = () => { close(); it.onClick?.(); };
     host.appendChild(b);
   }

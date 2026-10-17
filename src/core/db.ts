@@ -32,7 +32,7 @@ export function fromDbDate(v: unknown): number {
 export const dateOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : fromDbDate(v));
 export const dbDateOrNull = (ms: number | null | undefined): string | null => (ms === null || ms === undefined ? null : toDbDate(ms));
 
-// ---- schema (copied from a database made by the Swift build; GRDB migrations "v1" and "v2-person-notes", then our "v3-person-dates", "v4-external-ids" and "v5-people-title-proposed") ----
+// ---- schema (copied from a database made by the Swift build; GRDB migrations "v1" and "v2-person-notes", then our "v3-person-dates", "v4-external-ids", "v5-people-title-proposed" and "v6-custom-prompts") ----
 
 const V1 = `
 CREATE TABLE "people" ("id" TEXT PRIMARY KEY NOT NULL, "handle" TEXT NOT NULL UNIQUE, "name" TEXT NOT NULL, "relation" TEXT NOT NULL DEFAULT 'other', "cadence_days" INTEGER, "match_emails" TEXT NOT NULL DEFAULT '', "hidden_from_claude" BOOLEAN NOT NULL DEFAULT 0, "archived" BOOLEAN NOT NULL DEFAULT 0);
@@ -72,6 +72,9 @@ CREATE UNIQUE INDEX "items_external_id" ON "items"("external_id") WHERE "externa
 const V5 = `ALTER TABLE "people" ADD COLUMN "title" TEXT NOT NULL DEFAULT '';
 ALTER TABLE "items" ADD COLUMN "proposed" BOOLEAN NOT NULL DEFAULT 0;`;
 
+// 0.5.0: prompts written in the app or by Claude over MCP (Claude's wait for approval). needs and arguments hold JSON.
+const V6 = `CREATE TABLE "custom_prompts" ("id" TEXT PRIMARY KEY NOT NULL, "title" TEXT NOT NULL, "description" TEXT NOT NULL DEFAULT '', "needs" TEXT NOT NULL DEFAULT '[]', "arguments" TEXT NOT NULL DEFAULT '[]', "text" TEXT NOT NULL, "approved" BOOLEAN NOT NULL DEFAULT 0, "source" TEXT NOT NULL DEFAULT 'app', "created_at" DATETIME NOT NULL, "updated_at" DATETIME NOT NULL);`;
+
 /** In GRDB's order. Exported so tests can build a v1 database. */
 export const MIGRATIONS: ReadonlyArray<{ id: string; sql: string }> = [
   { id: 'v1', sql: V1 },
@@ -79,6 +82,7 @@ export const MIGRATIONS: ReadonlyArray<{ id: string; sql: string }> = [
   { id: 'v3-person-dates', sql: V3 },
   { id: 'v4-external-ids', sql: V4 },
   { id: 'v5-people-title-proposed', sql: V5 },
+  { id: 'v6-custom-prompts', sql: V6 },
 ];
 
 /** Runs `fn` in a write transaction (BEGIN IMMEDIATE, like GRDB); joins an open one. */

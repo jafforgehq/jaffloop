@@ -2,8 +2,10 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Item, ParsedCapture, TokenRole } from '../../shared/types';
 import { Icon } from '../components/icons';
+import { Help } from '../components/info';
 import { Avatar, Chip, Dot, Kbd, KIND_VAR, KindLabel, LoopRing } from '../components/ui';
 import { Fmt, expandTemplate, parseCapture } from '../core';
+import { tip } from '../help';
 import { api, openItems, recentPeople, settings, summaries } from '../model';
 import { ambientContext } from '../speed-logic';
 import { atQuery, capitalize, completeAt, highlightSegments, hm, suggestionsFor } from './capture-logic';
@@ -136,6 +138,7 @@ export function CaptureWindow() {
               onInput={(e) => { setText((e.target as HTMLInputElement).value); setSel(0); requestAnimationFrame(syncScroll); }}
               onKeyDown={onKeyDown} onKeyUp={syncScroll} onClick={syncScroll} onScroll={syncScroll} onSelect={syncScroll} />
           </div>
+          <Help id="capture.input" />
         </div>
         <hr class="hairline" />
         {empty ? (
@@ -144,22 +147,22 @@ export function CaptureWindow() {
               <KindHint k="owe">you promised</KindHint><KindHint k="wait">they promised</KindHint><KindHint k="bring">talking point</KindHint>
               <KindHint k="todo">your task</KindHint><KindHint k="said">log a quote</KindHint><KindHint k="note">a fact</KindHint>
             </div>
-            <div class="mono dim" style={{ fontWeight: 400 }}>fri · 3pm · in 2h · every mon · remind 1h · #tag · !</div>
+            <div class="mono dim row-flex" style={{ fontWeight: 400 }}>fri · 3pm · in 2h · every mon · remind 1h · #tag · !<Help id="capture.syntax" /></div>
           </div>
         ) : (
           <>
             <div class="cap-chips">
-              <Chip><Dot kind={parsed.kind} /><span class="mono">{parsed.kind}</span></Chip>
-              {expanded && <Chip title="Capture template"><Icon name="list" size={11} />template: {text.trim().split(/\s+/)[0]!.toLowerCase()}, {expanded.length} item{expanded.length === 1 ? '' : 's'}</Chip>}
+              <Chip title={tip('capture.kind')}><Dot kind={parsed.kind} /><span class="mono">{parsed.kind}</span></Chip>
+              {expanded && <Chip title={tip('capture.template')}><Icon name="list" size={11} />template: {text.trim().split(/\s+/)[0]!.toLowerCase()}, {expanded.length} item{expanded.length === 1 ? '' : 's'}</Chip>}
               {parsed.personHandle && (who
-                ? <Chip><Avatar person={who} size={14} />{who.name}</Chip>
-                : <Chip><Icon name="plus" size={10} />create {capitalize(parsed.personHandle)}</Chip>)}
-              {parsed.dueAt != null && <Chip><Icon name="calendar" size={11} /><span class="tnum">{dueText(parsed.dueAt, parsed.dueHasTime)}</span></Chip>}
-              {parsed.recurRule && <Chip><Icon name="repeat" size={11} />{Fmt.recurrenceText(parsed.recurRule)}</Chip>}
-              {parsed.remindAt != null && <Chip><Icon name="bell" size={11} />{Fmt.short(parsed.remindAt, 'EEE HH:mm')}</Chip>}
-              {parsed.tags.map((t) => <Chip key={t}>#{t}</Chip>)}
-              {parsed.pinned && <Chip><Icon name="pin" size={10} />pinned</Chip>}
-              {parsed.inbox && <Chip><span class="dim row-flex gap6"><Icon name="tray" size={11} />inbox</span></Chip>}
+                ? <Chip title={tip('capture.person')}><Avatar person={who} size={14} />{who.name}</Chip>
+                : <Chip title={tip('capture.person')}><Icon name="plus" size={10} />create {capitalize(parsed.personHandle)}</Chip>)}
+              {parsed.dueAt != null && <Chip title={tip('capture.due')}><Icon name="calendar" size={11} /><span class="tnum">{dueText(parsed.dueAt, parsed.dueHasTime)}</span></Chip>}
+              {parsed.recurRule && <Chip title={tip('capture.recur')}><Icon name="repeat" size={11} />{Fmt.recurrenceText(parsed.recurRule)}</Chip>}
+              {parsed.remindAt != null && <Chip title={tip('capture.remind')}><Icon name="bell" size={11} />{Fmt.short(parsed.remindAt, 'EEE HH:mm')}</Chip>}
+              {parsed.tags.map((t) => <Chip key={t} title={tip('capture.tag')}>#{t}</Chip>)}
+              {parsed.pinned && <Chip title={tip('capture.pin')}><Icon name="pin" size={10} />pinned</Chip>}
+              {parsed.inbox && <Chip title={tip('capture.inbox')}><span class="dim row-flex gap6"><Icon name="tray" size={11} />inbox</span></Chip>}
             </div>
             <hr class="hairline" />
             {expanded ? expandedParsed.slice(0, 3).map((e, i) => (
@@ -199,13 +202,13 @@ export function CaptureWindow() {
                 <hr class="hairline" />
                 {q === '' && <div class="caps" style={{ padding: '8px 18px 2px' }}>Recent</div>}
                 {suggestions.map((p, i) => (
-                  <div key={p.id} class={`cap-sug ${i === Math.min(sel, suggestions.length - 1) ? 'on' : ''}`}>
+                  <div key={p.id} class={`cap-sug ${i === Math.min(sel, suggestions.length - 1) ? 'on' : ''}`} title={tip('capture.complete')}>
                     <Avatar person={p} size={20} /><span>{p.name}</span><span class="mono dim">@{p.handle}</span>
                     <span class="grow" />{i === Math.min(sel, suggestions.length - 1) && <Kbd>tab</Kbd>}
                   </div>
                 ))}
                 {suggestions.length === 0 && q !== '' && (
-                  <div class="cap-sug"><span class="dim" style={{ display: 'inline-flex' }}><Icon name="plus" size={14} /></span><span>Create {capitalize(q)}</span><span class="grow" /><Kbd>⏎</Kbd></div>
+                  <div class="cap-sug" title={tip('capture.create')}><span class="dim" style={{ display: 'inline-flex' }}><Icon name="plus" size={14} /></span><span>Create {capitalize(q)}</span><span class="grow" /><Kbd>⏎</Kbd></div>
                 )}
               </>
             )}
@@ -215,6 +218,7 @@ export function CaptureWindow() {
         <div class="cap-keys">
           <KeyHint k="⏎">save</KeyHint><KeyHint k="⌘⏎">save and keep open</KeyHint><KeyHint k="esc">cancel</KeyHint>
           {empty && <KeyHint k="↑">repeat last</KeyHint>}
+          <Help id="capture.keys" />
         </div>
       </div>
     </div>

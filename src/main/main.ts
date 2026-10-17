@@ -11,6 +11,7 @@ import { Hotkey } from './hotkey';
 import { registerIpc } from './ipc';
 import { installMenu } from './menu';
 import { Notifier } from './notifications';
+import { builtinSchedulable, createScheduleService, defaultScheduleDeps } from './schedule';
 import { nextTrayText } from './tray-text';
 import { TrayController } from './tray';
 import { resolveTokens } from '../renderer/themes';
@@ -117,8 +118,8 @@ async function start(): Promise<void> {
 
   const exe = app.getPath('exe');
   const mcp = app.isPackaged
-    ? { binary: path.join(path.dirname(exe), 'jaffloop-mcp'), command: `claude mcp add jaffloop -- "${path.join(path.dirname(exe), 'jaffloop-mcp')}"` }
-    : { binary: path.join(appRoot, 'dist', 'mcp', 'server.cjs'), command: `claude mcp add jaffloop -e ELECTRON_RUN_AS_NODE=1 -- "${exe}" "${path.join(appRoot, 'dist', 'mcp', 'server.cjs')}"` };
+    ? { binary: path.join(path.dirname(exe), 'jaffloop-mcp'), command: `claude mcp add --scope user jaffloop -- "${path.join(path.dirname(exe), 'jaffloop-mcp')}"` }
+    : { binary: path.join(appRoot, 'dist', 'mcp', 'server.cjs'), command: `claude mcp add --scope user jaffloop -e ELECTRON_RUN_AS_NODE=1 -- "${exe}" "${path.join(appRoot, 'dist', 'mcp', 'server.cjs')}"` };
 
   notifier = new Notifier({
     items: () => store.items({}, Date.now()),
@@ -139,8 +140,14 @@ async function start(): Promise<void> {
     },
   });
 
+  const schedule = createScheduleService(defaultScheduleDeps((id) => {
+    const b = builtinSchedulable(id);
+    if (b) return b;
+    const cp = store.customPrompts().find((x) => x.id === id && x.approved);
+    return cp ? { id: cp.id, title: cp.title, description: cp.description, needs: cp.needs, arguments: cp.arguments, text: cp.text } : null;
+  }));
   registerIpc({
-    store, dbPath, windows, ui, hotkey, updates: () => updates, changed, settingsChanged: () => notifier.reschedule(), openMain,
+    schedule, store, dbPath, windows, ui, hotkey, updates: () => updates, changed, settingsChanged: () => notifier.reschedule(), openMain,
     flyDot: (from) => flyFrom(from), rendererOrigin: pathToFileURL(rendererDir).href, mcp, snapshotMode: env.JAFFLOOP_SEED === '1' || env.JAFFLOOP_SNAPSHOT === '1',
   });
 

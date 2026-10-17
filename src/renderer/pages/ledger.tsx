@@ -2,6 +2,7 @@
 import { useState } from 'preact/hooks';
 import { AllClosed } from '../components/all-closed';
 import { ItemList } from '../components/item-row';
+import { Help } from '../components/info';
 import { Page } from '../components/page';
 import { Avatar, Segmented } from '../components/ui';
 import { Fmt } from '../core';
@@ -15,13 +16,14 @@ export function LedgerPage() {
   const g = ledgerGroups(ledgerItems.value, overdueOnly, (i) => Fmt.isOverdue(i, now));
   useItemKeys(g.flat);
   const header = (
-    <div style={{ marginTop: 14 }}>
+    <div class="row-flex" style={{ marginTop: 14 }}>
       <Segmented<'all' | 'overdue'> label="Show" value={overdueOnly ? 'overdue' : 'all'} onChange={(v) => setOverdueOnly(v === 'overdue')}
         options={[{ value: 'all', label: 'All' }, { value: 'overdue', label: 'Overdue' }]} />
+      <Help id="ledger.show" />
     </div>
   );
   return (
-    <Page title="Promise ledger" subtitle={`${g.items.length} open · everything you have promised`} header={header}>
+    <Page title="Promise ledger" help="page.ledger" subtitle={`${g.items.length} open · everything you have promised`} header={header}>
       {g.items.length === 0 && <AllClosed title="No open promises" message="When you say you will do something, capture it: owe @sara review RFC fri." />}
       {g.order.map((pid) => {
         const p = person(pid || null);

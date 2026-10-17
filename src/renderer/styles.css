@@ -628,3 +628,47 @@ a.tlink:hover { text-decoration-thickness: 1px; }
 .row.proposal { cursor: default; }
 .row.proposal .btn { white-space: nowrap; }
 .proposals .section-head .btn { padding: 2px 8px; font-size: 11.5px; }
+
+/* (i) info buttons: see components/info.tsx */
+.info-wrap { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 4px; }
+.info-btn { display: inline-flex; align-items: center; justify-content: center; padding: 2px; border: 0; background: transparent; color: var(--text2); border-radius: 50%; cursor: help; line-height: 0; }
+.info-btn:hover, .info-btn:focus-visible { color: var(--text); background: var(--hover); }
+.info-tip { position: fixed; z-index: 120; width: 260px; padding: 8px 10px; background: var(--elevated); color: var(--text); border: 0.5px solid var(--hairline);
+  border-radius: 8px; box-shadow: 0 6px 22px var(--shadow); font: 12px/1.45 var(--font); text-align: left; text-transform: none; letter-spacing: 0; font-weight: 400; pointer-events: none; }
+
+/* Settings → Claude (MCP) (windows/claude-tab) */
+.ct-warn { margin: 9px 0; padding: 8px 12px; border-radius: 9px; font-size: 12.5px; line-height: 1.4;
+  background: color-mix(in srgb, var(--clay) 14%, transparent); border: 0.5px solid color-mix(in srgb, var(--clay) 50%, var(--hairline)); }
+.ct-tool { justify-content: flex-start; gap: 10px; padding: 6px 0; }
+.ct-tool-name { width: 118px; flex: none; }
+.ct-badge { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; border: 0.5px solid var(--hairline); color: var(--text2); white-space: nowrap; }
+.ct-badge.write { color: var(--clay); border-color: color-mix(in srgb, var(--clay) 50%, var(--hairline)); }
+.ct-label { font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; }
+.ct-field { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.ct-textarea { resize: vertical; min-height: 64px; font-size: 12px; line-height: 1.45; }
+.ct-arg { display: grid; grid-template-columns: 100px 1fr 1fr auto auto; gap: 6px; align-items: center; margin-bottom: 4px; }
+.ct-form { gap: 2px; }
+.ct-actions { margin-top: 6px; flex-wrap: wrap; }
+.ct-sub { font-size: 12px; font-weight: 600; margin: 8px 0 6px; }
+.ct-cmd { padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 0.5px solid var(--hairline); }
+.ct-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ct-table th { text-align: left; font-weight: 600; font-size: 11.5px; color: var(--text2); padding: 8px 6px 6px 0; border-bottom: 0.5px solid var(--hairline); }
+.ct-table td { padding: 7px 6px 7px 0; border-bottom: 0.5px solid var(--hairline); }
+.ct-table .num { text-align: right; padding-right: 14px; }
+.ct-quiet { margin-left: 8px; font: 500 10.5px var(--font); color: var(--text2); border: 0.5px solid var(--hairline); border-radius: 999px; padding: 1px 7px; }
+
+/* (i) placement helpers */
+.page-title-row { display: flex; align-items: center; min-width: 0; }
+.page-title-row .page-title { min-width: 0; }
+.sh-wrap { display: flex; align-items: center; }
+.sh-wrap .section-head { flex: 1; width: auto; min-width: 0; }
+.with-info { display: flex; align-items: center; }
+.with-info > .input, .with-info > select, .with-info > .grow { flex: 1; min-width: 0; }
+.pf-head { display: flex; align-items: center; }
+.form-row .row-flex .info-wrap:first-child { margin-left: 0; }
+.cap-card .info-wrap, .pop-root .info-wrap { margin-left: 2px; }
+.triage-bar .info-wrap { margin-left: 6px; }
+.drawer-label { display: inline-flex; align-items: center; width: 92px; }
+.drawer-label .info-wrap { margin-left: 2px; }
+.drawer .drawer-actions { flex-wrap: wrap; row-gap: 6px; }
+.info-tip { white-space: normal; overflow-wrap: anywhere; }

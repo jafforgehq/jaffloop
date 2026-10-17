@@ -1,6 +1,7 @@
 // Details drawer: every field of an item is editable. Ported from Selection.swift ItemDrawer.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { tip, type HelpId } from '../help';
 import { ITEM_KINDS } from '../../shared/types';
 import type { Item } from '../../shared/types';
 import { api, complete, drawerItemId, drop, orderedPeople, person, reopen, rename, setTags, snooze, togglePin, updateItem } from '../model';
@@ -9,13 +10,14 @@ import { Caret, Dropdown } from './dropdown';
 import { DueEditor } from './due-editor';
 import { SnoozeMenu } from './item-row';
 import { Icon } from './icons';
+import { Help } from './info';
 import { TitleLinks } from './linked-title';
 import { Avatar, KindLabel, Popover, PrimaryButton, QuietButton } from './ui';
 
-function Field({ label, children }: { label: string; children: ComponentChildren }) {
+function Field({ label, help, children }: { label: string; help?: HelpId; children: ComponentChildren }) {
   return (
     <div class="drawer-field">
-      <span class="caps drawer-label">{label}</span>
+      <span class="caps drawer-label">{label}{help && <Help id={help} size={12} />}</span>
       <span class="drawer-value">{children}</span>
     </div>
   );
@@ -87,23 +89,24 @@ export function ItemDrawer({ item }: { item: Item }) {
         <div class="row-flex gap8">
           <Dropdown label={`Kind: ${item.kind}. Change`} title="Change kind" className="btn quiet" face={<Caret><KindLabel kind={item.kind} /></Caret>}
             items={ITEM_KINDS.map((k) => ({ label: k, checked: k === item.kind, onClick: () => { void updateItem(item, `Now ${k}`, { kind: k }); } }))} />
+          <Help id="drawer.kind" />
           {!isOpen && <span class="mono dim">{item.status}</span>}
         </div>
-        <button type="button" class="btn quiet icon nodrag" aria-label="Close details" title="Close  esc" onClick={() => { drawerItemId.value = null; }}><Icon name="xmark" size={11} /></button>
+        <button type="button" class="btn quiet icon nodrag"  aria-label="Close details" title={`${tip('drawer.close')}`} onClick={() => { drawerItemId.value = null; }}><Icon name="xmark" size={11} /></button>
       </div>
 
-      <textarea ref={titleEl} class="drawer-title" rows={1} aria-label="Title" value={title}
+      <textarea ref={titleEl} class="drawer-title" rows={1} aria-label="Title" title={tip('drawer.title')} value={title}
         onInput={(e) => setTitle((e.target as HTMLTextAreaElement).value)} onBlur={commitTitle}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur(); } }} />
       <TitleLinks text={title} />
       {item.quote && <div class="quote" style={{ fontSize: 13, marginTop: 8 }}>“{item.quote}”</div>}
 
-      <textarea class="drawer-body" placeholder="Add details" aria-label="Details" value={bodyText}
+      <textarea class="drawer-body" placeholder="Add details" aria-label="Details" title={tip('drawer.details')} value={bodyText}
         onInput={(e) => setBodyText((e.target as HTMLTextAreaElement).value)} onBlur={commitBody} />
       <hr class="hairline" style={{ margin: '14px 0' }} />
 
       <div class="drawer-fields">
-        <Field label="Person">
+        <Field label="Person" help="drawer.person">
           <Dropdown label="Person. Change" title="Change person" className="btn quiet" align="right"
             face={<Caret>{p ? <><Avatar person={p} size={16} /><span>{p.name}</span></> : <span class="dim">No one</span>}</Caret>}
             items={[
@@ -111,7 +114,7 @@ export function ItemDrawer({ item }: { item: Item }) {
               ...orderedPeople.value.map((s) => ({ label: s.person.name, checked: s.person.id === item.personId, onClick: () => { void updateItem(item, `Assigned to ${s.person.name}`, { personId: s.person.id }); } })),
             ]} />
         </Field>
-        <Field label="Due">
+        <Field label="Due" help="drawer.due">
           <button type="button" ref={dueBtn} class="drawer-due" aria-label={exact ? `Due ${exact}. Change date` : 'Set a due date'}
             style={{ color: exact == null ? 'var(--text2)' : overdue ? 'var(--clay)' : 'var(--text)' }}
             onClick={() => { if (Date.now() - dueClosedAt.current < 250) return; setShowDue(true); }}>
@@ -124,18 +127,18 @@ export function ItemDrawer({ item }: { item: Item }) {
             }} />
           </Popover>
         </Field>
-        {item.remindAt != null && <Field label="Reminder">{Fmt.short(item.remindAt, 'EEE d MMM HH:mm')}</Field>}
-        {item.recurRule && <Field label="Repeats">{Fmt.recurrenceText(item.recurRule)}</Field>}
+        {item.remindAt != null && <Field label="Reminder" help="drawer.remind">{Fmt.short(item.remindAt, 'EEE d MMM HH:mm')}</Field>}
+        {item.recurRule && <Field label="Repeats" help="drawer.repeat">{Fmt.recurrenceText(item.recurRule)}</Field>}
         <Field label="Created">{Fmt.short(item.createdAt, 'd MMM yyyy')}</Field>
         <Field label="Last touched">{Fmt.short(item.lastTouchedAt, 'd MMM yyyy')}</Field>
-        {item.snoozeCount > 0 && <Field label="Snoozed"><span style={{ color: Fmt.isSlipping(item) ? 'var(--clay)' : undefined }}>{item.snoozeCount} time{item.snoozeCount === 1 ? '' : 's'}</span></Field>}
-        <Field label="Source">
+        {item.snoozeCount > 0 && <Field label="Snoozed" help="drawer.snoozed"><span style={{ color: Fmt.isSlipping(item) ? 'var(--clay)' : undefined }}>{item.snoozeCount} time{item.snoozeCount === 1 ? '' : 's'}</span></Field>}
+        <Field label="Source" help="drawer.source">
           <span class="row-flex gap8">
             {item.source}
             {(item.sourceLabel || item.externalId) && <SourceChip item={item} />}
           </span>
         </Field>
-        <Field label="Tags">
+        <Field label="Tags" help="drawer.tags">
           <input class="drawer-tags" placeholder="tag, tag" aria-label="Tags" value={tagText}
             onInput={(e) => { tagsDirty.current = true; setTagText((e.target as HTMLInputElement).value); }} onBlur={commitTags}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitTags(); } }} />
@@ -145,13 +148,16 @@ export function ItemDrawer({ item }: { item: Item }) {
       <div class="drawer-actions">
         {isOpen ? (
           <>
-            <PrimaryButton onClick={() => { void complete(item); }}>Complete</PrimaryButton>
-            <SnoozeMenu className="btn quiet" label="Snooze" face={<Caret>Snooze</Caret>} item={item} onPick={(until) => { void snooze(item, until); }} />
-            <QuietButton onClick={() => { void togglePin(item); }}>{item.pinned ? 'Unpin' : 'Pin'}</QuietButton>
-            <QuietButton onClick={() => { void drop(item); }}>Drop</QuietButton>
+            <PrimaryButton title={tip('drawer.complete')} onClick={() => { void complete(item); }}>Complete</PrimaryButton>
+            <SnoozeMenu className="btn quiet" label="Snooze" title={tip('drawer.snooze')} face={<Caret>Snooze</Caret>} item={item} onPick={(until) => { void snooze(item, until); }} />
+            <Help id="drawer.snooze" />
+            <QuietButton title={tip('drawer.pin')} onClick={() => { void togglePin(item); }}>{item.pinned ? 'Unpin' : 'Pin'}</QuietButton>
+            <Help id="drawer.pin" />
+            <QuietButton title={tip('drawer.drop')} onClick={() => { void drop(item); }}>Drop</QuietButton>
+            <Help id="drawer.drop" />
           </>
         ) : (
-          <QuietButton onClick={() => { void reopen(item); }}>Reopen</QuietButton>
+          <><QuietButton title={tip('row.reopen')} onClick={() => { void reopen(item); }}>Reopen</QuietButton><Help id="row.reopen" /></>
         )}
       </div>
     </aside>

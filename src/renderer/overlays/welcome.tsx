@@ -1,5 +1,6 @@
 import { Fmt } from '../core';
 import { dismissWelcome, openOnboarding, settings, showWelcome } from '../model';
+import { Help } from '../components/info';
 import { GhostButton, LoopRing, PrimaryButton } from '../components/ui';
 
 /** First run: a short welcome that can be skipped. */
@@ -30,8 +31,11 @@ export function WelcomeView() {
         {step('5', 'See what changes', "What's new and the roadmap are at the bottom of the sidebar.")}
         <div class="row-flex gap10" style={{ justifyContent: 'flex-end' }}>
           <GhostButton onClick={() => dismissWelcome(true)}>Add an example item</GhostButton>
+          <Help id="welcome.example" />
           <GhostButton onClick={() => dismissWelcome()}>Start</GhostButton>
+          <Help id="welcome.start" />
           <PrimaryButton onClick={() => openOnboarding()}>Add your team</PrimaryButton>
+          <Help id="welcome.team" />
         </div>
       </div>
     </div>

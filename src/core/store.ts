@@ -1,7 +1,7 @@
 // All reads and writes go through here, for both the app and the MCP server. Synchronous (node:sqlite).
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type {
-  ActivityEntry, ActivityEvent, AuditEntry, CaptureTemplate, HeatRow, Interaction, InteractionKind, Item, ItemFilter, ItemKind, ItemSource,
+  ActivityEntry, ActivityEvent, AuditEntry, CaptureTemplate, CustomPrompt, CustomPromptInput, PromptArg, SyncHealth, HeatRow, Interaction, InteractionKind, Item, ItemFilter, ItemKind, ItemSource,
   ItemStatus, InteractionWithItems, KeptRate, ParsedCapture, Person, PersonSummary, Relation, ReviewData, Settings, Snapshot, TodaySections, UpcomingDate, WeekSummary,
 } from '../shared/types';
 import { DAY_MS, addDays, dayDiff, startOfDay, startOfWeek } from './calendar';
@@ -13,6 +13,8 @@ import { parseCapture } from './parser';
 import { nextFutureOccurrence } from './recurrence';
 import { cadenceOverdue, daysSince, isOverdue, isSlipping, isStaleWait } from './rules';
 import { DEFAULT_SETTINGS, hm, hotkeyToAccelerator } from './settings';
+import { PROMPTS } from '../shared/prompts';
+import { validateCustomPrompt } from '../shared/prompt-validate';
 
 /** Where an item came from; `externalId` is the dedup key (unique across all items, whatever their status). */
 export interface ItemOrigin {
@@ -70,6 +72,14 @@ function interactionFromRow(r: Row): Interaction {
 }
 
 const auditFromRow = (r: Row): AuditEntry => ({ id: int(r.id), at: dateOrNull(r.at)!, tool: str(r.tool), summary: str(r.summary), wrote: bool(r.wrote) });
+
+function customPromptFromRow(r: Row): CustomPrompt {
+  const json = <T>(v: unknown): T[] => { try { const x: unknown = JSON.parse(str(v)); return Array.isArray(x) ? (x as T[]) : []; } catch { return []; } };
+  return {
+    id: str(r.id), title: str(r.title), description: str(r.description), needs: json<string>(r.needs), arguments: json<PromptArg>(r.arguments), text: str(r.text),
+    approved: bool(r.approved), source: str(r.source) === 'mcp' ? 'mcp' : 'app', createdAt: dateOrNull(r.created_at)!, updatedAt: dateOrNull(r.updated_at)!,
+  };
+}
 
 const ITEM_COLS = ['id', 'kind', 'title', 'body', 'quote', 'person_id', 'status', 'due_at', 'due_has_time', 'remind_at', 'snoozed_until',
   'snooze_count', 'recur_rule', 'pinned', 'inbox', 'source', 'created_at', 'updated_at', 'completed_at', 'last_touched_at',
@@ -129,7 +139,8 @@ export class Store {
         sound: d.get('sound') === '1', haptics: d.has('haptics') ? d.get('haptics') === '1' : true,
         hotkey: hotkeyToAccelerator(d.get('hotkey') ?? s.hotkey),
         jiraBaseUrl: d.get('jiraBaseUrl') ?? s.jiraBaseUrl, captureTemplates: parseTemplates(d.get('captureTemplates')),
-        reviewClaudeItems: d.get('reviewClaudeItems') === '1',
+        reviewClaudeItems: d.has('reviewClaudeItems') ? d.get('reviewClaudeItems') === '1' : s.reviewClaudeItems,
+        shareOneOnOneNotes: d.has('shareOneOnOneNotes') ? d.get('shareOneOnOneNotes') === '1' : s.shareOneOnOneNotes,
       };
     } catch {
       return { ...DEFAULT_SETTINGS, captureTemplates: [] };
@@ -143,6 +154,7 @@ export class Store {
       ['mcpReadOnly', s.mcpReadOnly ? '1' : '0'], ['compact', s.compact ? '1' : '0'], ['sound', s.sound ? '1' : '0'],
       ['haptics', s.haptics ? '1' : '0'], ['hotkey', s.hotkey],
       ['jiraBaseUrl', s.jiraBaseUrl ?? ''], ['captureTemplates', JSON.stringify(s.captureTemplates ?? [])], ['reviewClaudeItems', s.reviewClaudeItems ? '1' : '0'],
+      ['shareOneOnOneNotes', s.shareOneOnOneNotes ? '1' : '0'],
     ];
     write(this.db, () => {
       for (const [k, v] of pairs) run(this.db, 'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', k, v);
@@ -699,6 +711,59 @@ export class Store {
     try { return all(this.db, 'SELECT * FROM mcp_audit ORDER BY id DESC LIMIT ?', limit).map(auditFromRow); } catch { return []; }
   }
 
+  // ---- custom prompts (0.5.0) ----
+
+  customPrompts(): CustomPrompt[] {
+    return all(this.db, 'SELECT * FROM custom_prompts ORDER BY title COLLATE NOCASE, id').map(customPromptFromRow);
+  }
+
+  customPrompt(id: string): CustomPrompt | null {
+    const r = get(this.db, 'SELECT * FROM custom_prompts WHERE id = ?', id);
+    return r ? customPromptFromRow(r) : null;
+  }
+
+  /** Creates or replaces a prompt. 'app' saves are approved; an 'mcp' save (new or edited) always waits for approval. */
+  saveCustomPrompt(input: CustomPromptInput, source: 'app' | 'mcp', now: number = Date.now()): { prompt?: CustomPrompt; error?: string } {
+    const error = validateCustomPrompt(input, PROMPTS.map((p) => p.id));
+    if (error) return { error };
+    const args = input.arguments.map((a) => ({
+      name: a.name, description: a.description, required: a.required === true, ...(a.default !== undefined && a.default !== '' && { default: a.default }),
+    }));
+    write(this.db, () => {
+      const old = get(this.db, 'SELECT created_at FROM custom_prompts WHERE id = ?', input.id);
+      run(this.db,
+        `INSERT INTO custom_prompts(id, title, description, needs, arguments, text, approved, source, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET title=excluded.title, description=excluded.description, needs=excluded.needs, arguments=excluded.arguments, text=excluded.text,
+           approved=excluded.approved, source=excluded.source, updated_at=excluded.updated_at`,
+        input.id, input.title.trim(), input.description, JSON.stringify(input.needs), JSON.stringify(args), input.text, source === 'app' ? 1 : 0, source,
+        old ? str(old.created_at) : toDbDate(now), toDbDate(now));
+    });
+    return { prompt: this.customPrompt(input.id)! };
+  }
+
+  /** Only the app calls this; MCP cannot approve. Returns false for an unknown id. */
+  approveCustomPrompt(id: string, now: number = Date.now()): boolean {
+    return Number(run(this.db, 'UPDATE custom_prompts SET approved = 1, updated_at = ? WHERE id = ?', toDbDate(now), id).changes) > 0;
+  }
+
+  deleteCustomPrompt(id: string): boolean {
+    return Number(run(this.db, 'DELETE FROM custom_prompts WHERE id = ?', id).changes) > 0;
+  }
+
+  // ---- sync health (0.5.0) ----
+
+  /** Per source_label over all items (also proposed, done, dropped): how many Claude imported and when last. */
+  syncHealth(now: number = Date.now()): SyncHealth {
+    const rows = all(this.db,
+      `SELECT source_label, COUNT(*) total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) recent, MAX(created_at) last
+       FROM items WHERE source_label IS NOT NULL GROUP BY source_label`, toDbDate(now - 7 * DAY_MS));
+    const sources = rows.map((r) => ({ source: str(r.source_label), total: int(r.total), last7Days: int(r.recent), lastAt: dateOrNull(r.last) }))
+      .sort((a, b) => (b.lastAt ?? 0) - (a.lastAt ?? 0) || a.source.localeCompare(b.source));
+    let lastClaudeWriteAt: number | null = null;
+    try { lastClaudeWriteAt = dateOrNull(get(this.db, 'SELECT MAX(at) a FROM mcp_audit WHERE wrote = 1')?.a); } catch { /* no audit table yet */ }
+    return { sources, lastClaudeWriteAt };
+  }
+
   // ---- export, change detection, snapshot ----
 
   /** Pretty JSON of people, items and interactions: snake_case keys, ISO-8601 dates, keys sorted, nulls omitted (like the Swift export). */
@@ -714,6 +779,7 @@ export class Store {
       return o;
     });
     return JSON.stringify({
+      custom_prompts: dump('custom_prompts', ['approved']),
       interactions: dump('interactions', []),
       items: dump('items', ['due_has_time', 'pinned', 'inbox', 'proposed']),
       people: dump('people', ['hidden_from_claude', 'archived']),

@@ -44,7 +44,7 @@ describe('weekly review', () => {
     await shot('review-dark');
     await bothThemes('review');
 
-    await w.getByRole('button', { name: 'Copy as Markdown' }).click();
+    await w.getByRole('button', { name: 'Copy as Markdown', exact: true }).click();
     await sleep(400);
     const md = await clipboard();
     expect(md).toContain('## Week of');
@@ -72,11 +72,11 @@ describe('done page', () => {
   it('has the kept-rate line, copies the week and expands Today in review', async () => {
     await go('done');
     expect(await w.getByTestId('kept-rate').innerText()).toMatch(/kept on time/);
-    await w.getByRole('button', { name: 'Copy week as Markdown' }).click();
+    await w.getByRole('button', { name: 'Copy week as Markdown', exact: true }).click();
     await sleep(300);
     expect(await clipboard()).toContain('## Week of');
 
-    const panel = w.getByRole('button', { name: /Today in review/ });
+    const panel = w.getByRole('button', { name: /^Today in review/ });
     expect(await panel.getAttribute('aria-expanded')).toBe('false');
     await panel.click();
     expect(await panel.getAttribute('aria-expanded')).toBe('true');
@@ -109,7 +109,7 @@ describe('person page', () => {
   it('edits the start date and birthday in the editor and saves them', async () => {
     const sara = await w.evaluate(async () => (await window.jaffloop.snapshot()).summaries.find((s) => s.person.handle === 'sara')!.person.id);
     await go(`person:${sara}`);
-    await w.getByRole('button', { name: 'Person options' }).click();
+    await w.getByRole('button', { name: 'Person options', exact: true }).click();
     await w.getByRole('menuitem', { name: 'Edit person…' }).click();
     await w.getByLabel('Start date', { exact: true }).fill('2021-03-15');
     await w.getByLabel('Birthday (year is ignored)').fill('1990-07-04');
@@ -120,7 +120,7 @@ describe('person page', () => {
     expect(p.startDate).toBe('2021-03-15');
     expect(p.birthday).toBe('07-04');
 
-    await w.getByRole('button', { name: 'Person options' }).click();
+    await w.getByRole('button', { name: 'Person options', exact: true }).click();
     await w.getByRole('menuitem', { name: 'Edit person…' }).click();
     await w.getByRole('button', { name: 'Clear start date' }).click();
     await w.getByRole('button', { name: 'Save', exact: true }).click();

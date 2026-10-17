@@ -12,12 +12,12 @@ const rpc = (method: string, params?: object) => server.handle({ jsonrpc: '2.0',
 
 describe('prompts/list', () => {
   it('is advertised in initialize', () => {
-    expect(rpc('initialize', {}).result.capabilities.prompts).toEqual({});
+    expect(rpc('initialize', {}).result.capabilities.prompts).toEqual({ listChanged: true });
   });
 
   it('returns every prompt with name, title, description and arguments', () => {
     const list = rpc('prompts/list').result.prompts as any[];
-    expect(list).toHaveLength(11);
+    expect(list).toHaveLength(14);
     expect(list.map((p) => p.name)).toEqual(PROMPTS.map((p) => p.id));
     for (const [i, p] of PROMPTS.entries()) {
       expect(list[i]).toEqual({
@@ -33,7 +33,7 @@ describe('prompts/list', () => {
   });
 
   it('works without params', () => {
-    expect(rpc('prompts/list', {}).result.prompts).toHaveLength(11);
+    expect(rpc('prompts/list', {}).result.prompts).toHaveLength(14);
   });
 });
 
@@ -76,7 +76,7 @@ describe('prompts/get', () => {
   });
 
   it('every prompt renders with no leftover placeholder except missing required arguments, which are refused', () => {
-    expect(PROMPTS).toHaveLength(11);
+    expect(PROMPTS).toHaveLength(14);
     for (const p of PROMPTS) {
       const required = p.arguments.filter((a) => a.required);
       const bare = rpc('prompts/get', { name: p.id, arguments: {} });
@@ -89,7 +89,9 @@ describe('prompts/get', () => {
       const text = rpc('prompts/get', { name: p.id, arguments: full }).result.messages[0].content.text as string;
       // an optional argument without a default stays as {{name}} (renderPrompt's rule): meeting-notes {{person}} today, see the report
       const noDefault = p.arguments.filter((a) => !a.required && a.default === undefined).map((a) => a.name);
-      expect([...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).filter((n) => !noDefault.includes(n!)), p.id).toEqual([]);
+      // make-prompt's text mentions {{name}} literally, as an example for Claude: only declared arguments count
+      const declared = p.arguments.map((a) => a.name);
+      expect([...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).filter((n) => declared.includes(n!) && !noDefault.includes(n!)), p.id).toEqual([]);
       for (const a of required) expect(text, p.id).toContain(`value-of-${a.name}`);
     }
   });

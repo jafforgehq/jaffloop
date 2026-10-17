@@ -2,8 +2,10 @@
 import { useState } from 'preact/hooks';
 import { AllClosed } from '../components/all-closed';
 import { Icon } from '../components/icons';
+import { Help } from '../components/info';
 import { ItemRow } from '../components/item-row';
 import { IconButton } from '../components/ui';
+import { tip } from '../help';
 import { api, save, snapshot } from '../model';
 import { useReady } from './util';
 
@@ -18,9 +20,10 @@ export function PopoverWindow() {
     <div class="pop-root">
       <div class="pop-head">
         <span class="title sm">Today</span>
+        <Help id="pop.today" />
         <span class="grow" />
-        <IconButton title="Capture" label="Capture" onClick={() => void api.openCapture()}><Icon name="plus" size={15} /></IconButton>
-        <IconButton title="Open Jaffloop" label="Open Jaffloop" onClick={() => void api.openMain()}><Icon name="window" size={15} /></IconButton>
+        <IconButton title={tip('pop.capture')} label="Capture" onClick={() => void api.openCapture()}><Icon name="plus" size={15} /></IconButton>
+        <IconButton title={tip('pop.open')} label="Open Jaffloop" onClick={() => void api.openMain()}><Icon name="window" size={15} /></IconButton>
       </div>
       <hr class="hairline" />
       {list.length === 0 && t.inbox.length === 0 ? (
@@ -31,7 +34,7 @@ export function PopoverWindow() {
             {list.map((i, idx) => <ItemRow key={i.id} item={i} index={idx} showPerson showKind={false} compact />)}
           </div>
           {t.inbox.length > 0 && (
-            <button type="button" class="pop-inbox" onClick={() => void api.openMain('inbox')}>
+            <button type="button" class="pop-inbox" title={tip('pop.inbox')} onClick={() => void api.openMain('inbox')}>
               <Icon name="tray" size={13} /><span>{t.inbox.length} in Inbox</span>
             </button>
           )}
@@ -43,6 +46,7 @@ export function PopoverWindow() {
         <input value={quick} placeholder="Quick add — owe @sara review RFC fri" spellcheck={false} aria-label="Quick add"
           onInput={(e) => setQuick((e.target as HTMLInputElement).value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.isComposing) add(); }} />
+        <Help id="pop.quick" />
       </div>
     </div>
   );

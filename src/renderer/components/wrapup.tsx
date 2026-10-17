@@ -3,6 +3,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { api, go, overdueCount, settings, ui } from '../model';
 import { localDay, wrapupDue, wrapupText } from '../reports-logic';
 import { startOfDay } from '../ui-logic';
+import { tip } from '../help';
+import { Help } from './info';
 import { GhostButton, PrimaryButton } from './ui';
 
 export function WrapupCard() {
@@ -30,9 +32,9 @@ export function WrapupCard() {
   const dismiss = () => setStats(null);
   return (
     <div class="wrapup pillbar" role="status" aria-live="polite" data-testid="wrapup">
-      <div class="wrapup-msg">{wrapupText(stats.closed, overdueCount.value)}</div>
+      <div class="wrapup-msg">{wrapupText(stats.closed, overdueCount.value)}<Help id="wrapup.card" /></div>
       <div class="row-flex gap8">
-        <PrimaryButton onClick={() => { go('review'); dismiss(); }}>Open review</PrimaryButton>
+        <PrimaryButton title={tip('wrapup.open')} onClick={() => { go('review'); dismiss(); }}>Open review</PrimaryButton>
         <GhostButton onClick={dismiss}>Dismiss</GhostButton>
       </div>
     </div>

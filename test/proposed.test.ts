@@ -26,16 +26,44 @@ const review = (on = true): void => store.saveSettings({ ...store.settings(), re
 const proposed = (kind: 'owe' | 'wait' | 'task', title: string, handle: string | null, extra: Partial<Parameters<typeof newItem>[0]> = {}) =>
   newItem({ kind, title, personId: handle ? store.person(handle)!.id : null, proposed: true, source: 'mcp', now: NOW - DAY, ...extra });
 
+describe('shareOneOnOneNotes', () => {
+  const logged = (): void => { call('log_interaction', { person: 'sara', notes: 'private talk' }); };
+  it('defaults to on, saves and reads back', () => {
+    expect(store.settings().shareOneOnOneNotes).toBe(true);
+    store.saveSettings({ ...store.settings(), shareOneOnOneNotes: false });
+    expect(store.settings().shareOneOnOneNotes).toBe(false);
+    store.saveSettings({ ...store.settings(), shareOneOnOneNotes: true });
+    expect(store.settings().shareOneOnOneNotes).toBe(true);
+  });
+  it('on: get_person and prep_brief show the notes', () => {
+    logged();
+    expect(call('get_person', { handle: 'sara' }).json.recent_interactions[0].notes).toBe('private talk');
+    expect(call('prep_brief', { person: 'sara' }).json.recent_interactions[0].notes).toBe('private talk');
+  });
+  it('off: the notes key is gone from get_person, prep_brief and the person resource, but log_interaction still writes them', () => {
+    store.saveSettings({ ...store.settings(), shareOneOnOneNotes: false });
+    logged();
+    expect(store.interactions(store.person('sara')!.id)[0]!.notes).toBe('private talk');
+    for (const j of [call('get_person', { handle: 'sara' }).json, call('prep_brief', { person: 'sara' }).json]) {
+      expect(j.recent_interactions).toHaveLength(1);
+      expect(Object.keys(j.recent_interactions[0])).toEqual(['at', 'kind']);
+    }
+    const res = (server.handle({ jsonrpc: '2.0', id: 1, method: 'resources/read', params: { uri: 'jaffloop://person/sara' } }) as any).result;
+    expect(res.contents[0].text).not.toContain('private talk');
+  });
+});
+
 describe('setting', () => {
-  it('defaults to off, saves and reads back', () => {
-    expect(store.settings().reviewClaudeItems).toBe(false);
-    review();
+  it('defaults to on, saves and reads back', () => {
     expect(store.settings().reviewClaudeItems).toBe(true);
     review(false);
     expect(store.settings().reviewClaudeItems).toBe(false);
+    review();
+    expect(store.settings().reviewClaudeItems).toBe(true);
   });
 
   it('off: MCP items are normal items and there are no proposals', () => {
+    review(false);
     call('capture', { text: 'owe @sara review RFC fri' });
     call('add_item', { kind: 'task', title: 'x' });
     expect(store.proposedItems(NOW)).toHaveLength(0);

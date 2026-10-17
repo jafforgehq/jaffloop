@@ -1,6 +1,7 @@
 import { api, info, ui, updateState } from '../model';
 import { Fmt } from '../core';
 import { Icon } from './icons';
+import { Help } from './info';
 import { PrimaryButton } from './ui';
 
 /** Version, update status and the auto-check switch. Used by the What's new page and Settings → About. */
@@ -12,16 +13,19 @@ export function UpdatePanel() {
     <div class="update-panel">
       <div class="row-flex gap10" style={{ flexWrap: 'wrap' }}>
         {u.status === 'ready'
-          ? <PrimaryButton onClick={() => void api.installUpdate()}>Restart to update</PrimaryButton>
-          : <PrimaryButton onClick={() => void check()} disabled={busy || u.status === 'unavailable'}>{u.status === 'checking' ? 'Checking…' : 'Check for updates'}</PrimaryButton>}
-        <span class="dim" style={{ fontSize: 12 }}>Version {u.current || info.value.version}</span>
+          ? <><PrimaryButton onClick={() => void api.installUpdate()}>Restart to update</PrimaryButton><Help id="update.install" /></>
+          : <><PrimaryButton onClick={() => void check()} disabled={busy || u.status === 'unavailable'}>{u.status === 'checking' ? 'Checking…' : 'Check for updates'}</PrimaryButton><Help id="update.check" /></>}
+        <span class="dim row-flex" style={{ fontSize: 12 }}>Version {u.current || info.value.version}<Help id="update.status" /></span>
         <Status />
       </div>
       {u.version && u.notes && ['downloading', 'ready'].includes(u.status) && <div class="update-notes dim">{u.notes}</div>}
-      <label class="toggle" style={{ fontSize: 12.5 }}>
-        <input type="checkbox" checked={ui.value.autoUpdateCheck} onChange={(e) => void api.setUiState({ autoUpdateCheck: (e.target as HTMLInputElement).checked })} />
-        Check automatically
-      </label>
+      <div class="row-flex">
+        <label class="toggle" style={{ fontSize: 12.5 }}>
+          <input type="checkbox" checked={ui.value.autoUpdateCheck} onChange={(e) => void api.setUiState({ autoUpdateCheck: (e.target as HTMLInputElement).checked })} />
+          Check automatically
+        </label>
+        <Help id="update.auto" />
+      </div>
       <div class="dim" style={{ fontSize: 11.5 }}>Jaffloop contacts GitHub only to look for new versions. Turn automatic checks off here; you can still press Check for updates.</div>
     </div>
   );

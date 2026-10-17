@@ -7,6 +7,7 @@ import { API_METHODS } from '../shared/api';
 import type { Interaction, Person, Settings } from '../shared/types';
 import { hm, parseCapture, type Store } from '../core';
 import type { Hotkey } from './hotkey';
+import type { ScheduleService } from './schedule';
 import { playSound } from './sounds';
 import type { UiStateStore } from './ui-state';
 import type { UpdateService } from './update-service';
@@ -28,6 +29,7 @@ export interface IpcCtx {
   flyDot(from?: BrowserWindow | null): void;
   rendererOrigin: string;
   mcp: { command: string; binary: string };
+  schedule: ScheduleService;
   snapshotMode: boolean;
 }
 
@@ -86,6 +88,23 @@ export function createHandlers(c: IpcCtx): Handlers {
     logInteraction: (_e, personId, kind, notes): Interaction => write(() => c.store.logInteraction(personId, kind ?? '1on1', notes ?? null, now())),
     interactionHistory: (_e, personId, limit) => c.store.interactionHistory(personId, limit ?? 10, now()),
     logOneOnOne: (_e, personId, notes, itemIds, startedAt) => write(() => c.store.logOneOnOne(personId, notes, itemIds ?? [], startedAt, now())),
+
+    customPrompts: () => c.store.customPrompts(),
+    saveCustomPrompt: (_e, input) => {
+      const r = c.store.saveCustomPrompt(input, 'app', now());
+      if (r.prompt) c.changed();
+      return r;
+    },
+    approveCustomPrompt: (_e, id) => { write(() => c.store.approveCustomPrompt(id, now())); },
+    deleteCustomPrompt: async (_e, id) => {
+      c.store.deleteCustomPrompt(id);
+      await c.schedule.remove(id); // a sweep of a deleted prompt must not keep running
+      c.changed();
+    },
+    syncHealth: () => c.store.syncHealth(now()),
+    schedules: () => c.schedule.list(),
+    saveSchedule: (_e, s) => c.schedule.save(s),
+    removeSchedule: (_e, promptId) => c.schedule.remove(promptId),
 
     review: (_e, from, to) => c.store.review(from, to, now()),
     keptRate: (_e, days) => c.store.keptRate(days, now()),

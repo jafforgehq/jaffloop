@@ -9,7 +9,7 @@ import { Store } from '../src/core/store';
 import { MCPServer, mcpServerVersion } from '../src/mcp/server';
 
 const NOW = Date.UTC(2026, 9, 15, 9, 0, 0); // Thursday 15 October 2026, 09:00 UTC
-const WRITE_TOOLS = ['capture', 'add_item', 'add_items', 'complete_item', 'snooze_item', 'update_item', 'log_interaction', 'save_person'];
+const WRITE_TOOLS = ['capture', 'add_item', 'add_items', 'complete_item', 'snooze_item', 'update_item', 'log_interaction', 'save_person', 'save_prompt'];
 
 let store: Store;
 let server: MCPServer;
@@ -17,6 +17,7 @@ let rpcId = 0;
 
 beforeEach(() => {
   store = new Store(openMemoryDatabase());
+  store.saveSettings({ ...store.settings(), reviewClaudeItems: false }); // the default is on since 0.5.0; these tests are about plain adds
   server = new MCPServer(store, { now: () => NOW });
 });
 
@@ -78,7 +79,7 @@ describe('ported from the Swift MCPTests', () => {
   it('initialize and tools/list', () => {
     const r = rpc('initialize', {});
     expect(r.result.serverInfo).toEqual({ name: 'jaffloop', version: mcpServerVersion });
-    expect(rpc('tools/list').result.tools).toHaveLength(14);
+    expect(rpc('tools/list').result.tools).toHaveLength(16);
     expect(server.handle({ jsonrpc: '2.0', method: 'notifications/initialized' })).toBeNull();
   });
 });
@@ -87,7 +88,7 @@ describe('protocol', () => {
   it('tool names, required lists and schemas match the Swift server', () => {
     const tools = rpc('tools/list').result.tools as Array<{ name: string; description: string; inputSchema: any }>;
     expect(tools.map((t) => t.name)).toEqual(['capture', 'add_item', 'add_items', 'list_items', 'get_person', 'list_people', 'complete_item', 'snooze_item',
-      'update_item', 'log_interaction', 'save_person', 'search', 'prep_brief', 'week_summary']);
+      'update_item', 'log_interaction', 'save_person', 'search', 'prep_brief', 'week_summary', 'list_prompts', 'save_prompt']);
     for (const t of tools) expect(t.inputSchema).toMatchObject({ type: 'object', properties: expect.any(Object), required: expect.any(Array) });
     const add = tools.find((t) => t.name === 'add_item')!;
     expect(add.inputSchema.required).toEqual(['kind', 'title']);
@@ -98,7 +99,7 @@ describe('protocol', () => {
   it('echoes the client protocol version, defaults to 2025-03-26, advertises tools, resources and prompts', () => {
     expect(rpc('initialize', {}).result.protocolVersion).toBe('2025-03-26');
     expect(rpc('initialize', { protocolVersion: '2024-11-05' }).result.protocolVersion).toBe('2024-11-05');
-    expect(rpc('initialize', {}).result.capabilities).toEqual({ tools: {}, resources: {}, prompts: {} });
+    expect(rpc('initialize', {}).result.capabilities).toEqual({ tools: {}, resources: {}, prompts: { listChanged: true } });
   });
 
   it('ping, unknown method, resources list and templates', () => {
@@ -574,7 +575,7 @@ describe('stdio framing over a real process', () => {
     expect(replies.map((r) => r.id)).toEqual([1, 2, 3, 4, 5]);
     expect(replies[0].result.serverInfo.name).toBe('jaffloop');
     expect(replies[0].result.serverInfo.version).toMatch(/^\d+\.\d+\.\d+/);
-    expect(replies[1].result.tools).toHaveLength(14);
+    expect(replies[1].result.tools).toHaveLength(16);
     expect(replies[2].result.isError).toBeUndefined();
     expect(JSON.parse(replies[3].result.content[0].text)).toMatchObject({ count: 1, items: [{ title: 'review RFC', kind: 'owe', person: 'sara' }] });
     expect(replies[4].error.code).toBe(-32601);
@@ -598,7 +599,7 @@ describe('stdio framing over a real process', () => {
     const db = openDatabase(join(dir, 'p.sqlite'));
     try {
       const s = new Store(db);
-      expect(s.items({}).map((i) => [i.title, i.source])).toEqual([['from stdio', 'mcp']]);
+      expect(s.items({ includeProposed: true }).map((i) => [i.title, i.source, i.proposed])).toEqual([['from stdio', 'mcp', true]]); // review is on by default since 0.5.0
       expect(s.auditLog()[0]).toMatchObject({ tool: 'capture', wrote: true });
     } finally { db.close(); }
   }, 20_000);

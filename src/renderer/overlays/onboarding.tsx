@@ -2,8 +2,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Person } from '../../shared/types';
 import { Icon } from '../components/icons';
+import { Help } from '../components/info';
 import { PersonForm, createFromDraft } from '../components/person-form';
 import { GhostButton, Kbd, PrimaryButton } from '../components/ui';
+import { tip } from '../help';
 import { closeOnboarding, go, showOnboarding, showToast } from '../model';
 import { type PersonDraft, emptyDraft } from '../onboarding-logic';
 
@@ -62,14 +64,16 @@ function Wizard() {
           <div class="dim" style={{ fontSize: 12.5 }}>One person at a time. Everything can be changed later on their page.</div>
           <PersonForm key={round} draft={draft} onChange={(d) => { setDraft(d); if (error) setError(null); }} error={error} onSubmit={() => void save()} />
           <div class="row-flex gap8 ob-buttons">
-            <GhostButton onClick={() => closeOnboarding()} title="Close without saving this person">Skip</GhostButton>
+            <GhostButton onClick={() => closeOnboarding()} title={tip('onboarding.skip')}>Skip</GhostButton>
             <span class="grow" />
             <GhostButton onClick={() => void done()} disabled={busy || (empty && added.length === 0)}>Done</GhostButton>
+            <Help id="onboarding.done" />
             <PrimaryButton onClick={() => void save()} disabled={busy || empty}>Save and add another <Kbd>⌘⏎</Kbd></PrimaryButton>
+            <Help id="onboarding.next" />
           </div>
         </div>
         <aside class="ob-side" aria-label="People added so far" data-testid="added-list">
-          <div class="caps">Added so far{added.length > 0 && <span class="dim tnum"> · {added.length}</span>}</div>
+          <div class="caps">Added so far{added.length > 0 && <span class="dim tnum"> · {added.length}</span>}<Help id="onboarding.added" /></div>
           {added.length === 0 && <div class="dim" style={{ fontSize: 12.5 }}>No one yet.</div>}
           {added.map((p) => (
             <div key={p.id} class="ob-added" data-testid="added-person">
