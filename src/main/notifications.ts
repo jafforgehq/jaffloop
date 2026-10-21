@@ -1,6 +1,7 @@
 // Turns the plan from notify-plan.ts into timers and native notifications. Electron has no scheduled local notifications,
 // so timers are recomputed on every data change (debounced), on wake from sleep, and hourly.
 import { Notification, powerMonitor } from 'electron';
+import { quiet } from './quiet';
 import type { Item, Settings } from '../shared/types';
 import { isOverdue } from '../core/pure';
 import { planNotifications, type Planned } from './notify-plan';
@@ -111,7 +112,7 @@ export class Notifier {
     n.on('click', () => this.act(p, 'open'));
     n.on('action', (_e, index) => this.act(p, actions[index]?.id ?? 'open'));
     n.on('close', () => this.live.delete(n));
-    n.show();
+    if (!quiet) n.show();
   }
 
   /** Handles a click on the notification or one of its buttons. Exposed for tests. */

@@ -5,6 +5,11 @@ export interface RoadmapGroup { title: string; blurb: string; items: string[] }
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.5.1', date: '2026-10-21', title: 'Remove people', highlights: [
+      'You can now remove people: Archive (hides them, keeps history, restore under Archived on the People page) and Delete (removes the person and their 1:1 history for good, after asking; their items stay and open undated ones go to your Inbox).',
+    ],
+  },
+  {
     version: '0.5.0', date: '2026-10-17', title: 'Make your own prompts, scheduled sweeps and an (i) on every action', highlights: [
       'Make a prompt: describe what you want, copy the instruction into Claude, and Claude writes and saves the prompt. It waits for your approval in Settings → Claude (MCP) before it becomes a slash command.',
       'Two new prompts for the connectors you use: a Teams sweep (chat promises and asks) and Confluence mentions and reviews.',

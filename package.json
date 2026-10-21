@@ -1,7 +1,7 @@
 {
   "name": "jaffloop",
   "productName": "Jaffloop",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Menu bar app for engineering managers: track what you owe, what's owed to you, and what you told people. Local-first, with an MCP server for Claude.",
   "private": true,
   "type": "module",

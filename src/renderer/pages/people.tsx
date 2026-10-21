@@ -9,7 +9,7 @@ import { CadenceRing, Chip, Dot, GhostButton, PrimaryButton, Segmented } from '.
 import { Fmt } from '../core';
 import { tip } from '../help';
 import { useFetched } from '../hooks/use-fetched';
-import { addPerson, api, go, openOnboarding, orderedPeople, person, summaries, ui } from '../model';
+import { addPerson, api, archivedPeople, deletePerson, go, openOnboarding, orderedPeople, person, restorePerson, summaries, ui } from '../model';
 import { type PersonDraft, emptyDraft, titleLine } from '../onboarding-logic';
 import { lastOneOnOne, sortPeopleBy } from '../people-logic';
 import { heatWeekStarts, loadShares } from '../reports-logic';
@@ -147,7 +147,44 @@ export function PeoplePage() {
       {layout === 'grid'
         ? <div class="people-grid">{people.map((s) => <Card key={s.person.id} s={s} pinned={pinnedPeople.includes(s.person.id)} share={load.get(s.person.id)} />)}</div>
         : <div class="people-list">{people.map((s) => <Row key={s.person.id} s={s} share={load.get(s.person.id)} />)}</div>}
+      <ArchivedPeople />
     </Page>
+  );
+}
+
+/** People you archived: bring them back or delete them for good (asks first). */
+function ArchivedPeople() {
+  const list = archivedPeople.value;
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  if (list.length === 0) return null;
+  return (
+    <section class="section" data-testid="archived-people" style={{ marginTop: 24 }}>
+      <div class="sh-wrap">
+        <button type="button" class="section-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <span class={`chev ${open ? 'open' : ''}`}><Icon name="chevron" size={10} /></span>
+          <span class="caps">Archived</span>
+          <span class="dim tnum" style={{ fontSize: 11.5 }}>{list.length}</span>
+          <span class="rule" />
+        </button>
+        <Help id="people.archived" />
+      </div>
+      {open && list.map((p) => (
+        <div key={p.id} class="row-flex gap10" style={{ padding: '6px 2px' }} data-testid="archived-person">
+          <span class="grow">{p.name}{p.title.trim() ? <span class="dim"> · {p.title}</span> : null}</span>
+          {confirm === p.id
+            ? <>
+                <span class="dim" style={{ fontSize: 12 }}>Delete {p.name} and their 1:1 history for good?</span>
+                <GhostButton onClick={() => setConfirm(null)}>Cancel</GhostButton>
+                <PrimaryButton onClick={() => { setConfirm(null); void deletePerson(p); }}>Delete</PrimaryButton>
+              </>
+            : <>
+                <GhostButton onClick={() => void restorePerson(p)}>Restore</GhostButton>
+                <GhostButton onClick={() => setConfirm(p.id)}>Delete…</GhostButton>
+              </>}
+        </div>
+      ))}
+    </section>
   );
 }
 

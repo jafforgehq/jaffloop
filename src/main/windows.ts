@@ -4,6 +4,14 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { ApiEventName, ApiEvents, SettingsTab, WindowKind } from '../shared/api';
 import { readJson, writeJsonAtomic } from './ui-state';
+import { quiet } from './quiet';
+
+/** Show and focus a window; under e2e it is fully transparent, click-through and inactive so tests never pop up over your work (the page still renders, so Playwright screenshots work). */
+function reveal(w: BrowserWindow): void {
+  if (quiet) { w.setOpacity(0); w.setIgnoreMouseEvents(true); w.showInactive(); return; }
+  w.show();
+  w.focus();
+}
 
 export interface WindowsOptions {
   preload: string;
@@ -113,11 +121,10 @@ export class Windows {
       w.on('resize', save);
       w.on('move', save);
       w.on('closed', () => { if (this.main === w) this.main = null; });
-      w.once('ready-to-show', () => { if (w && !w.isDestroyed()) { w.show(); w.focus(); } });
+      w.once('ready-to-show', () => { if (w && !w.isDestroyed()) { reveal(w); } });
     } else {
       if (w.isMinimized()) w.restore();
-      w.show();
-      w.focus();
+      reveal(w);
     }
     if (nav && !created) this.sendWhenReady(w, 'navigate', nav);
     return w;
@@ -160,8 +167,7 @@ export class Windows {
     w.setBounds({ x, y, ...CAPTURE });
     void this.whenReady(w).then(() => {
       if (w.isDestroyed()) return;
-      w.show();
-      w.focus();
+      reveal(w);
       w.webContents.send('evt:capture-shown');
       this.o.onCaptureShown?.();
     });
@@ -179,7 +185,7 @@ export class Windows {
     if (existing?.isVisible()) { existing.hide(); return; }
     const w = existing ?? this.makePopover();
     this.positionPopover(w);
-    void this.whenReady(w).then(() => { if (!w.isDestroyed()) { this.positionPopover(w); w.show(); w.focus(); } });
+    void this.whenReady(w).then(() => { if (!w.isDestroyed()) { this.positionPopover(w); reveal(w); } });
   }
 
   private makePopover(): BrowserWindow {
@@ -216,20 +222,19 @@ export class Windows {
       this.settingsTab = t;
       w = this.make('settings', tab ? { tab } : {}, { width: 560, height: 460, title: 'Jaffloop Settings', resizable: false, minimizable: true, maximizable: false, fullscreenable: false, ...this.chrome() });
       const win = w;
-      win.once('ready-to-show', () => { if (!win.isDestroyed()) { win.show(); win.focus(); } });
+      win.once('ready-to-show', () => { if (!win.isDestroyed()) { reveal(win); } });
       win.on('closed', () => { if (this.settings === win) this.settings = null; });
       this.settings = win;
       win.center();
       return;
     }
-    w.show();
-    w.focus();
+    reveal(w);
   }
 
   private openBrief(view: 'brief' | 'morning', params: Record<string, string>, title: string): void {
     this.brief?.close();
     const w = this.make(view, params, { width: 620, height: 560, title, minWidth: 420, minHeight: 360, fullscreenable: false, ...this.chrome() });
-    w.once('ready-to-show', () => { if (!w.isDestroyed()) { w.show(); w.focus(); } });
+    w.once('ready-to-show', () => { if (!w.isDestroyed()) { reveal(w); } });
     w.on('closed', () => { if (this.brief === w) this.brief = null; });
     this.brief = w;
     w.center();

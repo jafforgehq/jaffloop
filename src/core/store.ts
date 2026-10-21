@@ -192,6 +192,19 @@ export class Store {
     return all(this.db, `SELECT * FROM people ${where} ORDER BY name COLLATE NOCASE`).map(personFromRow);
   }
 
+  /**
+   * Deletes a person for good: their 1:1 history goes with them (cascade), their items stay but lose the person, and open ones
+   * without a due date land in the Inbox so nothing is silently orphaned. Returns false when the id is unknown.
+   */
+  deletePerson(id: string): boolean {
+    return write(this.db, () => {
+      if (!get(this.db, 'SELECT 1 FROM people WHERE id = ?', id)) return false;
+      run(this.db, "UPDATE items SET inbox = 1 WHERE person_id = ? AND status = 'open' AND due_at IS NULL AND kind IN ('owe','wait','bring','task')", id);
+      run(this.db, 'DELETE FROM people WHERE id = ?', id);
+      return true;
+    });
+  }
+
   /** Insert or update by id. */
   savePerson(p: Person): void {
     const sets = PERSON_COLS.slice(1).map((c) => `${c}=excluded.${c}`).join(',');
@@ -796,7 +809,7 @@ export class Store {
     const snoozedCount = int(get(this.db, "SELECT COUNT(*) c FROM items WHERE status = 'open' AND proposed = 0 AND snoozed_until IS NOT NULL AND snoozed_until > ?", toDbDate(now))?.c);
     return {
       settings: this.settings(), today: this.today(now), openItems: this.items({ includeSnoozed: false }, now),
-      summaries: this.personSummaries(now), tags: this.allTags(), auditLog: this.auditLog(), snoozedCount, proposed: this.proposedItems(now), now,
+      summaries: this.personSummaries(now), archivedPeople: this.people(true).filter((p) => p.archived), tags: this.allTags(), auditLog: this.auditLog(), snoozedCount, proposed: this.proposedItems(now), now,
     };
   }
 }

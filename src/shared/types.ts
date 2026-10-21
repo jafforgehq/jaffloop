@@ -189,6 +189,8 @@ export interface Snapshot {
   today: TodaySections;
   openItems: Item[];
   summaries: PersonSummary[];
+  /** archived people, by name: hidden from lists and pickers, restorable or deletable from the People page */
+  archivedPeople: Person[];
   tags: Array<[string, number]>;
   auditLog: AuditEntry[];
   /** number of snoozed open items (sidebar badge) */

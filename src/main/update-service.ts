@@ -1,5 +1,6 @@
 // Wires UpdateController to electron-updater, the dialogs and the windows. Everything testable lives in updates.ts / update-policy.ts.
 import { app, BrowserWindow, dialog, Notification, shell } from 'electron';
+import { quiet } from './quiet';
 import { autoUpdater } from 'electron-updater';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
@@ -111,7 +112,7 @@ export class UpdateService {
     if (Notification.isSupported()) {
       const n = new Notification({ title: `Jaffloop ${version} is ready`, body: 'Click to review the update.', silent: true });
       n.on('click', () => this.d.showWindow());
-      n.show();
+      if (!quiet) n.show();
     }
     await new Promise<void>((resolve) => {
       const check = () => { if (this.d.appFocused()) { app.off('browser-window-focus', check); resolve(); } };

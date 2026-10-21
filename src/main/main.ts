@@ -7,6 +7,7 @@ import { isOverdue, isSlipping, openStore, type Store } from '../core';
 import { seed } from '../core/seed';
 import type { UiState } from '../shared/api';
 import { flyDot } from './flydot';
+import { quiet } from './quiet';
 import { Hotkey } from './hotkey';
 import { registerIpc } from './ipc';
 import { installMenu } from './menu';
@@ -69,6 +70,7 @@ if (!app.requestSingleInstanceLock()) {
 const applyNativeTheme = (u: UiState): void => { nativeTheme.themeSource = themeSource(u); };
 
 async function start(): Promise<void> {
+  if (quiet) { app.setActivationPolicy('accessory'); app.dock?.hide(); }
   fs.mkdirSync(userData, { recursive: true });
   try {
     store = openStore(dbPath);

@@ -153,7 +153,9 @@ describe('snooze until the next 1:1', () => {
     await row.hover();
     await row.getByRole('button', { name: 'Snooze' }).click();
     await w.getByRole('menuitem', { name: 'Tomorrow' }).first().waitFor();
-    expect(await w.getByRole('menuitem', { name: /Until next 1:1/ }).count()).toBe(0);
+    // an overdue 1:1 counts as "today": the preset is offered only while 09:00 today is still ahead (before 09:00 local time)
+    const before9 = new Date().getHours() < 9;
+    expect(await w.getByRole('menuitem', { name: /Until next 1:1/ }).count()).toBe(before9 ? 1 : 0);
     await w.keyboard.press('Escape');
   });
 });

@@ -113,6 +113,8 @@ export interface Api {
   snooze(id: string, untilMs: number): Promise<void>;
   assign(id: string, personHandle: string | null, dueMs: number | null, hasTime?: boolean): Promise<void>;
   savePerson(person: Person): Promise<void>;
+  /** delete a person for good (see Store.deletePerson); false when the id is unknown */
+  deletePerson(id: string): Promise<boolean>;
   /** creates the person from a display name when the handle is new; null for an unusable name */
   addPerson(name: string): Promise<Person | null>;
   logInteraction(personId: string, kind?: InteractionKind, notes?: string): Promise<Interaction>;
@@ -189,7 +191,7 @@ export interface Api {
 
 export const API_METHODS = [
   'snapshot', 'item', 'items', 'search', 'history', 'snoozed', 'tagsOf', 'setTags', 'saidLog', 'interactions', 'capture', 'parse',
-  'update', 'restore', 'complete', 'drop', 'reopen', 'snooze', 'assign', 'savePerson', 'addPerson', 'logInteraction',
+  'update', 'restore', 'complete', 'drop', 'reopen', 'snooze', 'assign', 'savePerson', 'deletePerson', 'addPerson', 'logInteraction',
   'interactionHistory', 'logOneOnOne', 'acceptProposed', 'dismissProposed', 'customPrompts', 'saveCustomPrompt', 'approveCustomPrompt', 'deleteCustomPrompt', 'syncHealth', 'schedules', 'saveSchedule', 'removeSchedule', 'captureMany', 'review', 'keptRate', 'activity', 'heatGrid', 'onTimeStreak', 'upcomingDates', 'pauseNotifications',
   'uiState', 'setUiState', 'appInfo', 'saveSettings',
   'openMain', 'openCapture', 'captureSubmit', 'captureHide', 'openSettings', 'openPersonBrief', 'openMorningBrief', 'closeWindow',

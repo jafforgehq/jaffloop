@@ -75,6 +75,7 @@ export function createHandlers(c: IpcCtx): Handlers {
     snooze: (_e, id, until) => write(() => c.store.snooze(id, until, now())),
     assign: (_e, id, handle, due, hasTime) => write(() => c.store.assign(id, handle, due, hasTime ?? false, now())),
     savePerson: (_e, p: Person) => write(() => c.store.savePerson(p)),
+    deletePerson: (_e, id: string) => write(() => c.store.deletePerson(id)),
     addPerson: (_e, name) => {
       const handle = personHandle(name);
       if (!handle) return null;

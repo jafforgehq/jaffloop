@@ -18,7 +18,7 @@ export const view = api.view;
 const emptySnapshot: Snapshot = {
   settings: { eodTime: '17:30', workStart: '09:00', workEnd: '18:00', morningBrief: '08:30', staleDaysAfterDue: 3, staleDaysNoDue: 5, mcpReadOnly: false, compact: false, sound: false, haptics: true, hotkey: 'Alt+Space', jiraBaseUrl: '', captureTemplates: [], reviewClaudeItems: true, shareOneOnOneNotes: true },
   today: { slipping: [], overdue: [], today: [], waitingStale: [], inbox: [], checkIn: [] },
-  openItems: [], summaries: [], tags: [], auditLog: [], snoozedCount: 0, proposed: [], now: Date.now(),
+  openItems: [], summaries: [], archivedPeople: [], tags: [], auditLog: [], snoozedCount: 0, proposed: [], now: Date.now(),
 };
 const defaultUi: UiState = {
   density: 'comfortable', appearance: 'system', accent: 'graphite', pinnedPeople: [], collapsed: [], pinOrder: [], savedFilters: [], lastNav: 'today',
@@ -58,6 +58,7 @@ export const drawerItem = signal<Item | null>(null);
 export const settings = computed(() => snapshot.value.settings);
 export const openItems = computed(() => snapshot.value.openItems);
 export const summaries = computed(() => snapshot.value.summaries);
+export const archivedPeople = computed(() => snapshot.value.archivedPeople);
 export const orderedPeople = computed(() => sortPeople(summaries.value, new Set(ui.value.pinnedPeople)));
 export const overdueCount = computed(() => openItems.value.filter((i) => Fmt.isOverdue(i, snapshot.value.now) || Fmt.isSlipping(i)).length);
 export const inboxItems = computed(() => openItems.value.filter((i) => i.inbox));
@@ -331,6 +332,14 @@ export async function logInteraction(p: Person) {
   setTimeout(() => { if (pulsePersonId.value === p.id) pulsePersonId.value = null; }, 1000);
 }
 export async function savePerson(p: Person) { await api.savePerson(p); await reload(); }
+/** Hide a person from lists and pickers; their history stays. */
+export async function archivePerson(p: Person) {
+  await savePerson({ ...p, archived: true });
+  showToast(`${p.name} archived`, () => { void savePerson({ ...p, archived: false }); });
+}
+export async function restorePerson(p: Person) { await savePerson({ ...p, archived: false }); }
+/** Delete a person for good: 1:1 history goes, their items stay (open ones land in the Inbox). */
+export async function deletePerson(p: Person) { await api.deletePerson(p.id); await reload(); }
 export async function addPerson(name: string): Promise<Person | null> { const p = await api.addPerson(name); await reload(); return p; }
 export async function saveSettings(patch: Partial<Snapshot['settings']>) { await api.saveSettings(patch); await reload(); }
 

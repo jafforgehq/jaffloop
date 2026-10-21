@@ -1,4 +1,5 @@
 import { BrowserWindow, nativeTheme, type Rectangle } from 'electron';
+import { quiet } from './quiet';
 
 /** cubic-bezier(0.5, 0, 0.9, 0.6) like the Swift timing function, solved for x by bisection. */
 export function ease(t: number, x1 = 0.5, y1 = 0, x2 = 0.9, y2 = 0.6): number {
@@ -27,6 +28,7 @@ function makeDotWindow(d: number): BrowserWindow {
 
 /** A dot leaves `from` (screen point) and lands on the tray icon. Resolves when it has landed. */
 export function flyDot(from: { x: number; y: number }, to: Rectangle, durationMs = 420): Promise<void> {
+  if (quiet) return Promise.resolve();
   return new Promise((resolve) => {
     const d = 12;
     // reuse the window of the last flight: creating one spawns a renderer process, which is what made completing an item lag

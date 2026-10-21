@@ -14,7 +14,7 @@ import { StreakChip } from '../components/streak';
 import { CadenceRing, Chip, EmptySection, GhostButton, MenuButton, Popover, PrimaryButton, SectionHeader } from '../components/ui';
 import { type HelpId, tip } from '../help';
 import { useItemKeys } from '../hooks/use-item-keys';
-import { api, captureFor, itemsFor, logInteraction, pulsePersonId, savePerson, summary } from '../model';
+import { api, archivePerson, captureFor, deletePerson, go, itemsFor, logInteraction, openItems, pulsePersonId, savePerson, summary } from '../model';
 import { titleLine } from '../onboarding-logic';
 import { firstName, lastStat } from '../people-logic';
 import { birthdayToInput, inputToBirthday, validDateInput } from '../reports-logic';
@@ -39,6 +39,8 @@ function Stat({ label, value, hot, help }: { label: string; value: string; hot?:
 function PersonBody({ s, startOneOnOne }: { s: PersonSummary; startOneOnOne: () => void }) {
   const p = s.person;
   const [edit, setEdit] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const openCount = openItems.value.filter((i) => i.personId === p.id).length;
   const [quick, setQuick] = useState('');
   const anchor = useRef<HTMLSpanElement>(null);
   const owe = itemsFor(p.id, 'owe'), wait = itemsFor(p.id, 'wait'), bring = itemsFor(p.id, 'bring');
@@ -67,11 +69,26 @@ function PersonBody({ s, startOneOnOne }: { s: PersonSummary; startOneOnOne: () 
               { label: 'Start 1:1 mode', hint: tip('person.start'), onClick: startOneOnOne },
               { label: 'Prep brief', hint: tip('person.brief'), onClick: () => void api.openPersonBrief(p.id) },
               { label: 'Edit person…', hint: tip('person.edit'), onClick: () => setEdit(true) },
+              { divider: true },
+              { label: 'Archive', hint: tip('person.archive'), onClick: () => { void archivePerson(p); go('people'); } },
+              { label: 'Delete…', hint: tip('person.delete'), danger: true, onClick: () => setConfirmDelete(true) },
             ]} />
           </span>
           <Help id="person.options" />
           <Popover anchor={anchor.current} open={edit} onClose={() => setEdit(false)} width={300}>
             <PersonEditor person={p} onDone={() => setEdit(false)} />
+          </Popover>
+          <Popover anchor={anchor.current} open={confirmDelete} onClose={() => setConfirmDelete(false)} width={300}>
+            <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }} role="alertdialog" aria-label={`Delete ${p.name}`} data-testid="delete-person">
+              <div style={{ fontWeight: 500 }}>Delete {p.name} for good?</div>
+              <div class="dim" style={{ fontSize: 12.5 }}>
+                Their 1:1 history and notes are removed. Their {openCount} open item{openCount === 1 ? '' : 's'} stay, without a person; those without a date go to your Inbox. To keep everything, archive instead.
+              </div>
+              <div class="row-flex gap8" style={{ justifyContent: 'flex-end' }}>
+                <GhostButton onClick={() => setConfirmDelete(false)}>Cancel</GhostButton>
+                <PrimaryButton onClick={() => { setConfirmDelete(false); void deletePerson(p); go('people'); }}>Delete</PrimaryButton>
+              </div>
+            </div>
           </Popover>
           {p.hiddenFromClaude && <><Chip><Icon name="eyeslash" size={11} />hidden from Claude</Chip><Help id="person.hidden" /></>}
         </div>
