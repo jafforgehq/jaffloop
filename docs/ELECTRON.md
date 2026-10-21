@@ -83,7 +83,7 @@ update themselves. Update flow tests use a local feed (see `test/e2e/update.test
 ## Environment variables and flags (for tests and screenshots)
 
 `JAFFLOOP_DB=<path>` database path, `JAFFLOOP_USERDATA=<dir>` Electron user-data dir, `JAFFLOOP_SMOKE=1` open the main window,
-print `SMOKE OK` and quit, `JAFFLOOP_NO_UPDATER=1`, `JAFFLOOP_E2E=1` (test hooks; windows are transparent, click-through and inactive, with no sounds, notifications, Dock icon or flying dot so tests never pop up over your work; add `JAFFLOOP_E2E_VISIBLE=1` to watch a run), `JAFFLOOP_SEED=1` fill an empty database with the demo data used for
+print `SMOKE OK` and quit, `JAFFLOOP_NO_UPDATER=1`, `JAFFLOOP_BACKUP_DIR=<dir>` (where the backup before "Reset everything" goes; default Documents), `JAFFLOOP_E2E=1` (test hooks; windows are transparent, click-through and inactive, with no sounds, notifications, Dock icon or flying dot so tests never pop up over your work; add `JAFFLOOP_E2E_VISIBLE=1` to watch a run), `JAFFLOOP_SEED=1` fill an empty database with the demo data used for
 screenshots, `--db <path>`, `--background` (no main window at launch).
 
 ## Who owns which files (the port is split between parallel workers)

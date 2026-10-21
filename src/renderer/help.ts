@@ -282,6 +282,8 @@ const defs = {
   'set.morning': ['Morning brief', 'On weekdays at this time you get a notification with your overdue promises and stale waits; its Open brief button shows the details.'],
   'set.dbPath': ['Database', 'The file where all your data lives on this Mac. Back it up like any file.'],
   'set.reveal': ['Reveal in Finder', 'Shows the database file in Finder.'],
+  'set.reset': ['Reset everything', 'Deletes all people, items, 1:1 notes, prompts and settings, after saving a backup file in Documents. Then you start again from "Add your team".'],
+  'set.resetConfirm': ['Confirm reset', 'Type RESET to enable the button. A JSON backup of everything is written to Documents first; if that fails nothing is deleted.'],
   'set.export': ['Export everything', 'Saves all your items, people and history as one JSON file you choose the place for.'],
   'set.releases': ['Release notes', 'Opens What\'s new and the roadmap in the main window.'],
 } as const satisfies Record<string, readonly [string, string]>;

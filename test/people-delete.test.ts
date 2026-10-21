@@ -37,3 +37,27 @@ describe('deletePerson', () => {
     expect(snap.archivedPeople.map((x) => x.id)).toEqual([p.id]);
   });
 });
+
+describe('resetAll', () => {
+  it('empties every user table, keeps the schema, and the store works afterwards', () => {
+    const s = new Store(openMemoryDatabase());
+    const sara = s.person('sara')!;
+    s.logInteraction(sara.id, '1on1', 'n', NOW);
+    s.capture('owe @sara review RFC fri #rfc', 'hotkey', NOW);
+    s.saveSettings({ ...s.settings(), eodTime: '16:00' });
+    s.saveCustomPrompt({ id: 'my-prompt', title: 'Mine', description: '', needs: [], arguments: [], text: 'Do something useful with Jaffloop please.' }, 'app', NOW);
+    s.audit('capture', 'x', true, NOW);
+
+    s.resetAll();
+
+    expect(s.people(true)).toHaveLength(0);
+    expect(s.items({ status: null, includeProposed: true }, NOW)).toHaveLength(0);
+    expect(s.allTags()).toHaveLength(0);
+    expect(s.customPrompts()).toHaveLength(0);
+    expect(s.auditLog()).toHaveLength(0);
+    expect(s.settings().eodTime).toBe(new Store(openMemoryDatabase()).settings().eodTime);
+    expect(s.search('review', 10, NOW)).toHaveLength(0);
+    s.capture('owe @amir fresh start', 'hotkey', NOW);
+    expect(s.people()).toHaveLength(1);
+  });
+});

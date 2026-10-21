@@ -179,6 +179,8 @@ export interface Api {
   revealDatabase(): Promise<void>;
   /** save dialog, then the JSON export; resolves to the saved path or null when cancelled */
   exportData(): Promise<string | null>;
+  /** Back everything up as JSON (Documents), then wipe all data and interface preferences. `error` set means nothing was changed. */
+  resetEverything(): Promise<{ backupPath?: string; error?: string }>;
   quit(): Promise<void>;
 
   // ---- updates ----
@@ -195,7 +197,7 @@ export const API_METHODS = [
   'interactionHistory', 'logOneOnOne', 'acceptProposed', 'dismissProposed', 'customPrompts', 'saveCustomPrompt', 'approveCustomPrompt', 'deleteCustomPrompt', 'syncHealth', 'schedules', 'saveSchedule', 'removeSchedule', 'captureMany', 'review', 'keptRate', 'activity', 'heatGrid', 'onTimeStreak', 'upcomingDates', 'pauseNotifications',
   'uiState', 'setUiState', 'appInfo', 'saveSettings',
   'openMain', 'openCapture', 'captureSubmit', 'captureHide', 'openSettings', 'openPersonBrief', 'openMorningBrief', 'closeWindow',
-  'setHotkey', 'playSound', 'copyText', 'openExternal', 'revealDatabase', 'exportData', 'quit',
+  'setHotkey', 'playSound', 'copyText', 'openExternal', 'revealDatabase', 'exportData', 'resetEverything', 'quit',
   'updateState', 'checkForUpdates', 'installUpdate',
 ] as const satisfies ReadonlyArray<keyof Api>;
 

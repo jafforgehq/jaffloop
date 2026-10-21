@@ -46,9 +46,9 @@ describe('people helpers', () => {
 
 describe('releases data', () => {
   it('leads with the newest release and keeps the older history', () => {
-    expect(releaseNotes.map((n) => n.version)).toEqual(['0.5.1', '0.5.0', '0.4.0', '0.3.1', '0.3.0', '0.2.0', '0.1.0', '0.0.4', '0.0.3', '0.0.2', '0.0.1']);
-    expect(releaseNotes[6]!.title).toBe('Now built on Electron');
-    expect(releaseNotes[7]!.highlights).toHaveLength(10);
+    expect(releaseNotes.map((n) => n.version)).toEqual(['0.5.2', '0.5.1', '0.5.0', '0.4.0', '0.3.1', '0.3.0', '0.2.0', '0.1.0', '0.0.4', '0.0.3', '0.0.2', '0.0.1']);
+    expect(releaseNotes[7]!.title).toBe('Now built on Electron');
+    expect(releaseNotes[8]!.highlights).toHaveLength(10);
     expect(roadmap.flatMap((g) => g.items).some((i) => i.includes('Today they never do'))).toBe(false);
   });
 });

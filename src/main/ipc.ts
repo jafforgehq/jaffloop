@@ -9,7 +9,7 @@ import { hm, parseCapture, type Store } from '../core';
 import type { Hotkey } from './hotkey';
 import type { ScheduleService } from './schedule';
 import { playSound } from './sounds';
-import type { UiStateStore } from './ui-state';
+import { DEFAULT_UI, type UiStateStore } from './ui-state';
 import type { UpdateService } from './update-service';
 import type { Windows } from './windows';
 
@@ -28,6 +28,8 @@ export interface IpcCtx {
   /** the dot flies from the window that saved to the tray icon */
   flyDot(from?: BrowserWindow | null): void;
   rendererOrigin: string;
+  /** where the automatic backup before a reset goes (Documents, or JAFFLOOP_BACKUP_DIR) */
+  backupDir: string;
   mcp: { command: string; binary: string };
   schedule: ScheduleService;
   snapshotMode: boolean;
@@ -180,6 +182,20 @@ export function createHandlers(c: IpcCtx): Handlers {
       if (r.canceled || !r.filePath) return null;
       fs.writeFileSync(r.filePath, c.store.exportJSON());
       return r.filePath;
+    },
+    resetEverything: async () => {
+      // the backup comes first: when it cannot be written nothing is deleted
+      const d = new Date();
+      const pad = (n: number): string => String(n).padStart(2, '0');
+      const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}.${pad(d.getMinutes())}.${pad(d.getSeconds())}`;
+      const backupPath = path.join(c.backupDir, `Jaffloop backup ${stamp}.json`);
+      try { fs.mkdirSync(c.backupDir, { recursive: true }); fs.writeFileSync(backupPath, c.store.exportJSON()); } catch (e) { return { error: `Could not write the backup (${e instanceof Error ? e.message : String(e)}). Nothing was deleted.` }; }
+      c.store.resetAll();
+      c.ui.set({ ...DEFAULT_UI, lastSeenVersion: app.getVersion(), welcomeSeen: true });
+      c.hotkey.register(c.store.settings().hotkey);
+      c.settingsChanged();
+      c.changed();
+      return { backupPath };
     },
     quit: () => { app.quit(); },
 

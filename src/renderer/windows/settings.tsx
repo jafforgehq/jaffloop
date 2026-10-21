@@ -228,7 +228,43 @@ function Data() {
         {saved && <span class="dim" style={{ fontSize: 11.5 }}>Saved to {saved}</span>}
       </div>
       <div class="form-row"><Note>Everything stays on this Mac. The only network use is checking GitHub for new versions.</Note></div>
+      <ResetEverything />
     </Group>
+  );
+}
+
+/** Wipe all data and start again from "Add your team". A JSON backup is written first; the user must type RESET. */
+function ResetEverything() {
+  const [open, setOpen] = useState(false);
+  const [word, setWord] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ backupPath?: string; error?: string } | null>(null);
+  const run = async () => {
+    setBusy(true);
+    const r = await api.resetEverything();
+    setBusy(false);
+    setResult(r);
+    if (r.backupPath) { setOpen(false); setWord(''); void api.openMain('add-people'); }
+  };
+  return (
+    <div class="form-row" style={{ display: 'block' }} data-testid="reset-everything">
+      <div class="row-flex gap8">
+        <GhostButton onClick={() => { setOpen(!open); setResult(null); }}>Reset everything…</GhostButton>
+        <Help id="set.reset" />
+      </div>
+      {open && (
+        <div role="alertdialog" aria-label="Reset everything" style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Note>This deletes every person, item, 1:1 note, custom prompt and setting, and starts the setup again. A backup of everything is saved in Documents first. Scheduled sweeps on this Mac are not touched.</Note>
+          <div class="row-flex gap8">
+            <input class="input" style={{ width: 150 }} value={word} placeholder="Type RESET" aria-label="Type RESET to confirm" onInput={(e) => setWord((e.target as HTMLInputElement).value)} />
+            <Help id="set.resetConfirm" />
+            <GhostButton disabled={word !== 'RESET' || busy} onClick={() => void run()}>Back up and reset</GhostButton>
+          </div>
+        </div>
+      )}
+      {result?.error && <div class="clay" style={{ fontSize: 12, marginTop: 8 }}>{result.error}</div>}
+      {result?.backupPath && <div class="dim" style={{ fontSize: 11.5, marginTop: 8 }}>Reset done. Backup saved to {result.backupPath}</div>}
+    </div>
   );
 }
 

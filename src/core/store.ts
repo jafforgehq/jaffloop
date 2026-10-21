@@ -205,6 +205,13 @@ export class Store {
     });
   }
 
+  /** Wipes everything the user entered: people, items (tags, events), 1:1s, custom prompts, settings and the MCP audit log. The schema stays. */
+  resetAll(): void {
+    write(this.db, () => {
+      for (const t of ['item_tags', 'item_events', 'items', 'interactions', 'people', 'custom_prompts', 'settings', 'mcp_audit']) run(this.db, `DELETE FROM ${t}`);
+    });
+  }
+
   /** Insert or update by id. */
   savePerson(p: Person): void {
     const sets = PERSON_COLS.slice(1).map((c) => `${c}=excluded.${c}`).join(',');

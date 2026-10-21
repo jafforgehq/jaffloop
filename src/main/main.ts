@@ -150,7 +150,7 @@ async function start(): Promise<void> {
   }));
   registerIpc({
     schedule, store, dbPath, windows, ui, hotkey, updates: () => updates, changed, settingsChanged: () => notifier.reschedule(), openMain,
-    flyDot: (from) => flyFrom(from), rendererOrigin: pathToFileURL(rendererDir).href, mcp, snapshotMode: env.JAFFLOOP_SEED === '1' || env.JAFFLOOP_SNAPSHOT === '1',
+    flyDot: (from) => flyFrom(from), rendererOrigin: pathToFileURL(rendererDir).href, backupDir: env.JAFFLOOP_BACKUP_DIR ?? app.getPath('documents'), mcp, snapshotMode: env.JAFFLOOP_SEED === '1' || env.JAFFLOOP_SNAPSHOT === '1',
   });
 
   installMenu({

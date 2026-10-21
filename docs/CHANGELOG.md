@@ -2,6 +2,10 @@
 
 Also shown inside the app (What's new). Newest first.
 
+## 0.5.2 (2026-10-21): Start over
+
+- Reset everything (Settings → Data): saves a JSON backup in Documents, then deletes all people, items, 1:1 notes, prompts and settings and takes you back to Add your team. You have to type RESET to confirm.
+
 ## 0.5.1 (2026-10-21): Remove people
 
 - You can now remove people: Archive (hides them, keeps history, restore under Archived on the People page) and Delete (removes the person and their 1:1 history for good, after asking; their items stay and open undated ones go to your Inbox).

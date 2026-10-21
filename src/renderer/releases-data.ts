@@ -5,6 +5,11 @@ export interface RoadmapGroup { title: string; blurb: string; items: string[] }
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.5.2', date: '2026-10-21', title: 'Start over', highlights: [
+      'Reset everything (Settings → Data): saves a JSON backup in Documents, then deletes all people, items, 1:1 notes, prompts and settings and takes you back to Add your team. You have to type RESET to confirm.',
+    ],
+  },
+  {
     version: '0.5.1', date: '2026-10-21', title: 'Remove people', highlights: [
       'You can now remove people: Archive (hides them, keeps history, restore under Archived on the People page) and Delete (removes the person and their 1:1 history for good, after asking; their items stay and open undated ones go to your Inbox).',
     ],
