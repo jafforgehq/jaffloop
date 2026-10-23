@@ -1,5 +1,12 @@
 # Jaffloop
 
+[![CI](https://github.com/jafforgehq/jaffloop/actions/workflows/ci.yml/badge.svg)](https://github.com/jafforgehq/jaffloop/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/jafforgehq/jaffloop)](https://github.com/jafforgehq/jaffloop/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Platform: macOS (Apple Silicon)](https://img.shields.io/badge/platform-macOS%20arm64-lightgrey)
+
+Free and open source. [Download the latest release](https://github.com/jafforgehq/jaffloop/releases/latest).
+
 A macOS menu bar app for engineering managers. It tracks **what you owe people, what they owe you, what to bring up with them, and what you told them**, so nothing from a fast-moving week gets lost.
 
 Capture in one line. Everything stays on your Mac. Claude can read and write your data through a local MCP server, and the app itself has no AI. Its only network use is checking GitHub for new versions.
@@ -180,22 +187,24 @@ window), `src/shared` (types and the interface to the main process). The design 
 Environment variables for tests and screenshots: `JAFFLOOP_DB`, `JAFFLOOP_USERDATA`, `JAFFLOOP_SEED=1`, `JAFFLOOP_NO_UPDATER=1`,
 `JAFFLOOP_SMOKE=1`. Regenerate the README screenshots with `npm run screenshots`.
 
-## Signing and releasing
+## Releasing
 
-Builds are signed with a **Developer ID Application** certificate (hardened runtime) and notarized by Apple.
-`scripts/release-mac.sh` does everything from your own Mac with the certificate in your keychain and a notarytool profile:
-
-```sh
-xcrun notarytool store-credentials jaffloop --apple-id you@example.com --team-id TEAMID   # once; app-specific password
-scripts/release-mac.sh              # build, sign, notarize, verify, self-test, write the update manifest
-scripts/release-mac.sh --publish    # ...and upload to the GitHub release for the version in package.json
-```
-
-It checks `codesign`, `spctl` and `stapler`, launches the signed app once and calls the MCP wrapper, and validates
-`latest-mac.yml` (the manifest installed apps read) before anything is uploaded; the manifest goes up last. Release checklist:
-update `docs/CHANGELOG.md` and `src/renderer/releases-data.ts`, bump `version` in `package.json`, run the script.
+Maintainers only. Builds are signed with a Developer ID Application certificate and notarized by Apple.
+`scripts/release-mac.sh` builds, signs, notarizes, verifies and self-tests, then writes the update manifest
+(`--publish` uploads to the GitHub release for the version in `package.json`). Run it once with
+`xcrun notarytool store-credentials jaffloop --apple-id <your Apple ID> --team-id <TEAMID>` first. Release checklist: update
+`docs/CHANGELOG.md` and `src/renderer/releases-data.ts`, bump `version` in `package.json`, run the script.
 
 ## Not in this version
 
 No sync, iOS app, sharing, AI inside the app, planning tools, or Mac App Store build. See the spec and
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+## Contributing
+
+Issues and pull requests are welcome. Run `npm run typecheck` and `npm test` before opening a pull request; `npm run test:e2e`
+covers the built app. Your data stays on your Mac, so please keep new features local-first and free of telemetry.
+
+## License
+
+[MIT](LICENSE) © 2026 Fedja Hadziselimovic

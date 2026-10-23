@@ -19,7 +19,6 @@ Also shown inside the app (What's new, Roadmap tab). Plans change. Nothing here 
 
 ## Open decisions
 
-- License: which parts are open (MCP server, data format) and which stay paid.
 - Whether updates should ever install without asking. Today they download in the background and ask before restarting.
 
 ## Keeping this in sync

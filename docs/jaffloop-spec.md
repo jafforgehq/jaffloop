@@ -377,14 +377,10 @@ Other earlier ideas, parked: 1:1 templates, decision log, wins log, weekly revie
 
 ---
 
-## 11. Business and distribution (context, not v1 work)
+## 11. Distribution (context, not v1 work)
 
-- **Distribution:** direct download, notarized (Developer ID), sold through a merchant of record (Lemon Squeezy or Paddle), updates via Sparkle. Not the Mac App Store.
-- **Licensing:** Lemon Squeezy's built-in license API is the simplest start. Keygen only if machine limits, proper trials or offline license files are needed. Use a 7 to 14 day offline grace period and store the key in Keychain.
-- **Price:** not $2 to 3. A niche tool for engineering managers and Claude users fits $9 to 15 one-time, with a trial.
-- **Open source:** open the MCP server and data format, keep the app itself paid. Host under the `jafforgehq` GitHub org.
-- **Bosnia:** confirm payout support and whether a registered business entity (obrt) is needed before choosing a provider.
-- **Plan:** build it for yourself first, use it for a month as an EM, then decide.
+- **Open source, free:** the whole app, the MCP server and the data format are MIT licensed. There is no paid tier, license key or trial.
+- **Distribution:** direct download from GitHub releases, signed with a Developer ID and notarized. Not the Mac App Store.
 
 ---
 
