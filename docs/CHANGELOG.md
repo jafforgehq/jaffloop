@@ -2,6 +2,10 @@
 
 Also shown inside the app (What's new). Newest first.
 
+## 0.5.3 (2026-10-23): Open source
+
+- Jaffloop is now free and open source under the MIT license. No code changes to the app.
+
 ## 0.5.2 (2026-10-21): Start over
 
 - Reset everything (Settings → Data): saves a JSON backup in Documents, then deletes all people, items, 1:1 notes, prompts and settings and takes you back to Add your team. You have to type RESET to confirm.

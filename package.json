@@ -1,7 +1,7 @@
 {
   "name": "jaffloop",
   "productName": "Jaffloop",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Menu bar app for engineering managers: track what you owe, what's owed to you, and what you told people. Local-first, with an MCP server for Claude.",
   "private": true,
   "license": "MIT",
@@ -9,7 +9,10 @@
   "main": "dist/main/main.cjs",
   "author": "Jaffloop",
   "homepage": "https://github.com/jafforgehq/jaffloop",
-  "repository": { "type": "git", "url": "git+https://github.com/jafforgehq/jaffloop.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jafforgehq/jaffloop.git"
+  },
   "engines": {
     "node": ">=22"
   },
