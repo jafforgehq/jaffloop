@@ -5,6 +5,11 @@ export interface RoadmapGroup { title: string; blurb: string; items: string[] }
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.5.3', date: '2026-10-23', title: 'Open source', highlights: [
+      'Jaffloop is now free and open source under the MIT license. No code changes to the app.',
+    ],
+  },
+  {
     version: '0.5.2', date: '2026-10-21', title: 'Start over', highlights: [
       'Reset everything (Settings → Data): saves a JSON backup in Documents, then deletes all people, items, 1:1 notes, prompts and settings and takes you back to Add your team. You have to type RESET to confirm.',
     ],
@@ -136,7 +141,6 @@ export const roadmap: RoadmapGroup[] = [
   },
   {
     title: 'Open decisions', blurb: 'Need an answer before work starts.', items: [
-      'License: which parts are open (MCP server, data format) and which stay paid.',
       'Whether updates should ever install without asking. Today they download in the background and ask before restarting.',
     ],
   },
